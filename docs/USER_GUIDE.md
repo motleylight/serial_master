@@ -1,0 +1,122 @@
+# SerialMaster 项目文档 (Phase 1)
+
+本文档详细说明了 SerialMaster 项目当前阶段（Phase 1: MVP）的功能、架构组成及使用方法。
+
+## 1. 项目概览
+SerialMaster 是一个基于 Rust (Tauri) 和 React 的高性能现代串口调试助手。
+目前已完成 **MVP (最小可行性产品)** 开发，具备以下核心能力：
+- **跨平台架构**: Rust 后端 + Web 前端。
+- **设备管理**: 自动扫描并列出系统串口。
+- **基本通信**: 支持设置波特率 (默认 115200) 并打开/关闭串口。
+- **高性能日志**: 支持高频数据接收，具备虚拟滚动 (Virtual Scrolling) 和 Hex/ASCII 视图切换功能。
+- **测试工具**: 内置 Pyhon/Rust 数据生成工具用于回环测试。
+
+---
+
+## 2. 详细使用说明
+
+### 2.1 启动主程序 (Main Application)
+
+主程序由两个部分组成：**后端 (Tauri Core)** 和 **前端 (UI)**。开发模式下需要分别启动。
+
+#### 方式一：一键启动 (推荐，需环境支持)
+在 `src/tauri` 目录下运行：
+```powershell
+# 这会自动启动后端，并由后端自动启动前端服务 (通过 beforeDevCommand)
+# 注意：如果遇到 npm 路径问题或文件占用报错，请使用方式二
+cd src/tauri
+npx @tauri-apps/cli dev
+# 或者
+cargo run
+```
+
+#### 方式二：手动分步启动 (稳定)
+**步骤 1：启动前端**
+打开终端 A：
+```powershell
+cd src/ui
+npm run dev
+```
+*等待输出： `Local: http://localhost:5173/`*
+
+**步骤 2：启动后端**
+打开终端 B：
+```powershell
+cd src/tauri
+# 确保 cargo 依赖已构建 (首次运行可能较慢)
+npx @tauri-apps/cli dev
+```
+*成功后会自动弹出一个名为 "SerialMaster" 的独立窗口。请勿直接在浏览器访问 localhost:5173，因为浏览器环境没有串口访问权限。*
+
+### 2.2 功能操作
+1.  **连接串口**:
+    *   在左侧或顶部工具栏找到 "Connect COM8" 按钮（目前 MVP 阶段硬编码为 COM8/115200 用于快速测试）。
+    *   点击连接，如果成功，按钮状态变为 "Connected"，并在日志区显示 `[SYS] Connected...`.
+2.  **发送数据**:
+    *   点击 "Send Hello"，会向串口发送 "Hello Rust!" 字符串。
+3.  **查看日志**:
+    *   **视图切换**: 点击右上角的 `ASCII` / `HEX` 按钮切换显示模式。
+    *   **自动滚动**: 点击 `Auto Scroll` 图标（绿色为开启）。向上滚动日志时自动暂停跟随，拉到底部自动恢复。
+    *   **清空**: 点击垃圾桶图标清空当前屏幕日志。
+
+---
+
+## 3. 测试工具 (Data Generator)
+
+为了在没有真实串口设备的情况下测试软件，项目提供了数据生成脚本。
+
+**原理**: 向 `COM9` 端口持续写入数据。
+**前置条件**: 需要成对的虚拟串口 `COM8` <-> `COM9` (推荐使用 com0com 或 Virtual Serial Port Driver)。
+
+### 3.1 Python 版本 (推荐)
+位于 `scripts/flood_com9.py`。
+*依赖*: `pyserial`
+
+**运行方法**:
+```powershell
+# 1. 安装依赖
+pip install pyserial
+
+# 2. 运行脚本
+python scripts/flood_com9.py
+```
+*效果*: 终端会每隔 50ms 打印 `Tx: ...`，此时在 SerialMaster (连接 COM8) 中应能看到源源不断的接收数据。
+
+### 3.2 Rust 版本
+位于 `src/bin/flood_com9.rs`。
+
+**运行方法**:
+```powershell
+cargo run --bin flood_com9
+```
+*效果*: 同 Python 版本，但性能更高。
+
+---
+
+## 4. 常见故障排除
+
+### Q: 启动时报错 `OS Error 32` (文件被占用)
+*   **现象**: `cargo run` 或构建失败，提示 `.pdb` 或 `.exe` 无法访问。
+*   **原因**: Windows 下常见问题，通常是程序未完全退出，或被杀毒软件/索引服务锁定。
+*   **解决**:
+    1.  手动关闭所有相关的终端窗口。
+    2.  运行 `cargo clean` (位于项目根目录) 清理构建缓存。
+    3.  重试。
+
+### Q: 启动时报错 `OS Error 32` (文件被占用) - 终极解决方案
+如果上述方法无效，请使用项目根目录下的 **`safe_run.ps1`** 脚本启动。
+该脚本会将构建产物重定向到临时目录，从而避开 D 盘的文件锁定问题。
+**使用方法**:
+```powershell
+.\safe_run.ps1
+```
+*注意*: 由于 `tauri.conf.json` 中 `beforeDevCommand` 为空，您仍需在另一个终端手动启动前端 (`npm run dev`)。
+
+
+### Q: 浏览器打开 `localhost:5173` 显示报错或无法连接
+*   **原因**: 本项目是 **Tauri 应用**，依赖操作系统底层的 API (Rust)。普通的 Chrome/Edge 浏览器环境不具备这些 API (`window.__TAURI__` 未定义)。
+*   **解决**: 必须通过 `cargo run` 或 `tauri dev` 启动的**独立应用窗口**来使用。
+
+### Q: 点击 "Connect" 没反应
+*   **原因**: 可能是 COM8 不存在或被占用。
+*   **解决**: 检查设备管理器是否有 COM8，或确保 `flood_com9` 脚本（占用 COM9）已运行且 COM8/COM9 已成对连接。
