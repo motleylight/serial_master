@@ -18,8 +18,20 @@ impl SerialManager {
         }
     }
 
-    pub fn open(&mut self, port_name: &str, baud_rate: u32) -> Result<()> {
+    pub fn open(
+        &mut self, 
+        port_name: &str, 
+        baud_rate: u32,
+        data_bits: serialport::DataBits,
+        flow_control: serialport::FlowControl,
+        parity: serialport::Parity,
+        stop_bits: serialport::StopBits,
+    ) -> Result<()> {
         let port = serialport::new(port_name, baud_rate)
+            .data_bits(data_bits)
+            .flow_control(flow_control)
+            .parity(parity)
+            .stop_bits(stop_bits)
             .timeout(Duration::from_millis(10))
             .open()
             .map_err(|e| anyhow!("Failed to open port: {}", e))?;

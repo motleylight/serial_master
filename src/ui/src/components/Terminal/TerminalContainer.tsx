@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { type LogData, LogEntry, type ViewMode } from './LogEntry';
 import { cn } from '../../lib/utils';
-import { ArrowDownCircle, Trash2, FileText, Binary } from 'lucide-react';
+import { ArrowDownCircle, Trash2 } from 'lucide-react';
 
 interface TerminalContainerProps {
     logs: LogData[];
