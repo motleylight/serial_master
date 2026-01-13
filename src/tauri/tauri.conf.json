@@ -7,14 +7,14 @@
     "frontendDist": "../ui/dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "",
-    "beforeBuildCommand": "npm.cmd run build --prefix ../ui"
+    "beforeBuildCommand": ""
   },
   "app": {
     "windows": [
       {
         "title": "SerialMaster",
-        "width": 800,
-        "height": 600,
+        "width": 1024,
+        "height": 768,
         "resizable": true,
         "fullscreen": false
       }
