@@ -90,8 +90,19 @@ pub async fn disconnect(state: State<'_, Mutex<SerialManager>>) -> Result<(), St
 }
 
 #[tauri::command]
-pub async fn send(state: State<'_, Mutex<SerialManager>>, content: Vec<u8>) -> Result<(), String> {
+pub async fn send(state: State<'_, Mutex<SerialManager>>, script_manager: State<'_, crate::scripting::ScriptManager>, content: Vec<u8>) -> Result<(), String> {
+    let final_content = script_manager.run_pre_send(content)?;
     let manager = state.lock().await;
-    manager.write(&content).await.map_err(to_string_err)?;
+    manager.write(&final_content).await.map_err(to_string_err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_script(state: State<'_, crate::scripting::ScriptManager>, script_type: String, content: String) -> Result<(), String> {
+    match script_type.as_str() {
+        "pre_send" => state.set_pre_send_script(content),
+        "post_send" => state.set_post_send_script(content),
+        _ => return Err(format!("Invalid script type: {}", script_type)),
+    }
     Ok(())
 }

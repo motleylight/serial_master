@@ -8,6 +8,7 @@ import { ControlPanel } from './components/ControlPanel';
 import { CommandManager } from './components/CommandManager';
 import { PanelRightClose } from 'lucide-react';
 import { cn } from './lib/utils';
+import { ScriptEditor } from './components/ScriptEditor';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -43,6 +44,7 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [showSidePanel, setShowSidePanel] = useState(true);
   const [sidePanelWidth, setSidePanelWidth] = useState(288); // Default w-72 equivalent
+  const [showScriptEditor, setShowScriptEditor] = useState(false);
 
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     port_name: '',
@@ -173,8 +175,11 @@ function App() {
                   onConnect={handleConnect}
                   onDisconnect={handleDisconnect}
                   onSend={handleSend}
+                  onOpenScripting={() => setShowScriptEditor(true)}
                 />
               </div>
+
+              <ScriptEditor isOpen={showScriptEditor} onClose={() => setShowScriptEditor(false)} />
             </div>
 
             {/* Drag Handle */}

@@ -1,6 +1,8 @@
 mod commands;
+pub mod scripting;
 
 use serial_master::core::serial_manager::SerialManager;
+use scripting::ScriptManager;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
@@ -11,6 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(Mutex::new(SerialManager::new()))
+        .manage(ScriptManager::new())
         .setup(|app| {
             let app_handle = app.handle().clone();
             let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(100);
@@ -42,7 +45,8 @@ pub fn run() {
             commands::get_ports,
             commands::connect,
             commands::disconnect,
-            commands::send
+            commands::send,
+            commands::set_script
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

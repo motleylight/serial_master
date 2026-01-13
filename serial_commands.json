@@ -1,20 +1,20 @@
 [
   {
-    "id": "1768278547827",
+    "id": "1768311358088",
     "name": "Cmd",
-    "command": "fadsg",
+    "command": "qwer",
     "isHex": false
   },
   {
-    "id": "1768278548233",
-    "name": "Cmd",
-    "command": "sdagfdas",
+    "id": "1768311358592",
+    "name": "好的",
+    "command": "fdsa",
     "isHex": false
   },
   {
-    "id": "1768278548462",
+    "id": "1768311358952",
     "name": "Cmd",
-    "command": "awesfawe",
-    "isHex": false
+    "command": "12 34 56 78",
+    "isHex": true
   }
 ]

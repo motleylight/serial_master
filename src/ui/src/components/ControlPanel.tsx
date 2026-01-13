@@ -11,6 +11,7 @@ interface ControlPanelProps {
     onConnect: () => void;
     onDisconnect: () => void;
     onSend: (data: Uint8Array | number[]) => void;
+    onOpenScripting: () => void;
 }
 
 export function ControlPanel({
@@ -20,6 +21,7 @@ export function ControlPanel({
     onConnect,
     onDisconnect,
     onSend,
+    onOpenScripting,
 }: ControlPanelProps) {
     // --- Settings Logic ---
     const [ports, setPorts] = useState<SerialPortInfo[]>([]);
@@ -193,9 +195,17 @@ export function ControlPanel({
 
                 {/* Connect Button */}
                 <button
+                    onClick={onOpenScripting}
+                    className="ml-auto h-7 px-3 rounded flex items-center gap-1.5 font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white shadow-sm mr-2"
+                    title="Scripting"
+                >
+                    <span className="text-xs">Scripting</span>
+                </button>
+
+                <button
                     onClick={connected ? onDisconnect : onConnect}
                     className={cn(
-                        "ml-auto h-7 px-3 rounded flex items-center gap-1.5 font-medium transition-colors text-white shadow-sm",
+                        "h-7 px-3 rounded flex items-center gap-1.5 font-medium transition-colors text-white shadow-sm",
                         connected ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"
                     )}
                 >
