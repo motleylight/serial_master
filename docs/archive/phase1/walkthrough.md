@@ -1,41 +1,41 @@
-# Serial Master Enhanced Features Walkthrough
+# 串口大师增强功能演示
 
-I have implemented the requested features for the Serial Master application, including enhanced serial parameters, hex support, and command file management.
+我已经实现了串口大师应用程序的请求功能，包括增强的串口参数、十六进制支持和命令文件管理。
 
-## Features Implemented
+## 已实现功能
 
-1.  **Extended Serial Configuration**:
-    - Support for Baud Rate, Data Bits, Stop Bits, Parity, and Flow Control.
-2.  **Hex Support**:
-    - **Hex Display**: Toggle between ASCII and Hex view in the terminal.
-    - **Hex Send**: Send raw bytes by entering hex strings (e.g., `AA BB CC`).
-3.  **Command Management**:
-    - Create, Edit, and Delete saved commands.
-    - Import/Export commands to JSON files.
-    - Quick send button for saved commands.
-4.  **Input Enhancements**:
-    - Command History (Up/Down Arrow).
-    - Configurable Line Endings (None, LF, CR, CRLF).
+1.  **扩展串口配置**:
+    - 支持波特率、数据位、停止位、奇偶校验和流控制。
+2.  **Hex 支持**:
+    - **Hex 显示**: 在终端中切换 ASCII 和 Hex 视图。
+    - **Hex 发送**: 通过输入十六进制字符串 (例如 `AA BB CC`) 发送原始字节。
+3.  **命令管理**:
+    - 创建、编辑和删除保存的命令。
+    - 导入/导出命令到 JSON 文件。
+    - 已保存命令的快速发送按钮。
+4.  **输入增强**:
+    - 命令历史记录 (上/下箭头)。
+    - 可配置的行尾 (None, LF, CR, CRLF)。
 
-## Verification Results
+## 验证结果
 
-I verified the UI functionality using the browser environment (with mock serial backend).
+我使用浏览器环境 (带有模拟串口后端) 验证了 UI 功能。
 
-### 1. Initial Layout & Configuration
-The main interface now includes a top settings bar and a side panel for command management.
+### 1. 初始布局与配置
+主界面现在包含顶部的设置栏和用于命令管理的侧面板。
 
 ![Initial Layout](initial_page_layout_1768233058467.png)
 
-### 2. Connection and Data Flow
-Connecting (mocked) shows successful connection status. Sending "Test Command" works, and the terminal displays both transmitted (TX) and received (RX) data.
+### 2. 连接与数据流
+连接 (模拟) 显示连接成功状态。发送 "Test Command" 工作正常，终端显示发送 (TX) 和接收 (RX) 的数据。
 
 ![Connected State](connected_state_log_1768233090019.png)
 
-### 3. Command Manager
-The side panel allows managing a list of commands. Here we created a new "Test 1" command with Hex content `AA BB CC`.
+### 3. 命令管理器
+侧面板允许管理命令列表。在这里我们创建了一个新的 "Test 1" 命令，内容为 Hex `AA BB CC`。
 
 ![Command Edit Mode](edit_mode_command_manager_1768233165142.png)
 
-## Validation Recording
-The full verification session can be viewed here:
+## 验证录屏
+完整的验证会话可以在这里查看:
 ![Verification Video](ui_verification_1768233044061.webp)
