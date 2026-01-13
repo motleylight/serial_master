@@ -1,55 +1,54 @@
 # SerialMaster (串口大师)
 
-A modern, extensible, cross-platform serial debugging assistant built with Tauri and Rust.
 基于 Tauri 和 Rust 构建的现代化、可扩展、跨平台串口调试助手。
 
-## ✨ Key Features (核心特性)
+[English Documentation](README_EN.md)
 
-*   **⚡ High Performance**: Built on Tauri & Rust, ultra-lightweight (~8MB release) and fast.
-    *   **高性能**: 基于 Tauri & Rust，超轻量（发布版约 8MB），启动迅速。
-*   **🐍 Python Scripting**: Embedded **RustPython** engine. Write Python scripts to intercept and process data (Pre-send, Post-send, Rx-hook) without external dependencies.
-    *   **Python 脚本**: 内置 RustPython 引擎。支持编写 Python 脚本实时处理发送前、发送后及接收到的数据，无需安装 Python 环境。
-*   **🎨 Modern UI**: Built with React + Tailwind CSS. Supports virtual scrolling for high-performance log display.
-    *   **现代界面**: React + Tailwind CSS 构建。支持虚拟列表技术，流畅显示海量日志。
-*   **🔌 Smart Port Management**: Automatically identifies USB/Bluetooth devices with friendly names.
-    *   **智能端口管理**: 自动识别并显示 USB/蓝牙设备的完整友好名称。
-*   **💾 Command Persistence**: Save and manage your frequently used commands.
-    *   **指令管理**: 支持常用指令的保存和快速调用。
+## ✨ 核心特性
 
-## 🛠️ Tech Stack (技术栈)
+*   **⚡ 高性能**: 基于 Tauri & Rust，超轻量（发布版约 8MB），启动迅速。
+*   **🔍 正则过滤与替换 (Regex Filter)**:
+    *   **实时过滤**: 支持使用 JS 正则表达式实时筛选海量日志。
+    *   **上下文查看**: 支持显示匹配行的前后 N 行，并自动用虚线分隔不连续的日志块。
+    *   **动态替换**: 支持使用正则捕获组（`$1`）重写日志显示内容（例如将 `Temp=(\d+)` 显示为 `温度: $1`）。
+*   **🐍 Python 脚本**: 内置 **RustPython** 引擎。无需安装 Python 环境，即可编写脚本实时处理发送前、发送后及接收到的数据。
+*   **🎨 现代界面**: React + Tailwind CSS 构建。支持虚拟列表技术，流畅显示百万级日志。
+*   **🔌 智能端口管理**: 自动识别并显示 USB/蓝牙设备的完整友好名称。
+*   **💾 指令管理**: 支持常用指令的保存和快速调用。
+
+## 🛠️ 技术栈
 
 *   **Frontend**: React, TypeScript, Tailwind CSS, Shadcn UI
 *   **Backend**: Rust, Tauri
 *   **Scripting**: RustPython (Embedded Python 3 Interpreter)
 
-## 🚀 Development & Build (开发与构建)
+## 🚀 开发与构建
 
-### Prerequisites (前置要求)
+### 前置要求
 *   Node.js & npm
 *   Rust & Cargo
 
-### Run Locally (本地运行)
+### 本地运行
 ```bash
-# Install frontend dependencies
+# 安装前端依赖
 cd src/ui
 npm install
 
-# Run dev server
+# 运行前端开发服务器
 npm run dev
 
-# Run Tauri app (in a new terminal)
-# Go back to root
+# 运行 Tauri 应用 (在新的终端/根目录)
 npx @tauri-apps/cli dev
 ```
 
-### Build Release (构建发布版)
+### 构建发布版
 ```bash
 npm install -g @tauri-apps/cli
 cargo tauri build
-# OR
+# 或者
 npx @tauri-apps/cli build
 ```
-The output installer will be in `target/release/bundle/nsis/`.
+构建出的安装包位于 `target/release/bundle/nsis/`。
 
 ## 📄 License
 

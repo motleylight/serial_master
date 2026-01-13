@@ -14,7 +14,7 @@ interface TerminalContainerProps {
 
 export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => {
     const [autoScroll, setAutoScroll] = useState(true);
-    const [viewMode, setViewMode] = useState<ViewMode>('HEX');
+    const [viewMode, setViewMode] = useState<ViewMode>('ASCII');
 
     // Filter & Replace State
     const [filterText, setFilterText] = useState('');

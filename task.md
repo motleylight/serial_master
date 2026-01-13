@@ -11,3 +11,7 @@
 - [x] Logic: Implement `useMemo` for Filter + Replace (`$1` support) <!-- id: 4 -->
 - [x] Safety: Add Debounce & Error Handling <!-- id: 5 -->
 - [x] Verify: Test filtering, substitution, and context <!-- id: 6 -->
+
+# Task: Refactor Serial Config UI
+- [x] UI: Combine Data/Stop/Parity into "8N1" Popover <!-- id: 9 -->
+- [x] Logic: Update display to show summary notation <!-- id: 10 -->

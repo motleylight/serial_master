@@ -1,7 +1,7 @@
 import { useState, useEffect, KeyboardEvent } from "react";
 import { SerialService, SerialConfig, SerialPortInfo } from "../services/ipc";
 import { cn } from "../lib/utils";
-import { RefreshCw, Link, Link2Off, Send } from "lucide-react";
+import { RefreshCw, Link, Link2Off, Send, ChevronDown } from "lucide-react";
 import { HexSwitch } from "./ui/HexSwitch";
 import { PortSelect } from "./ui/PortSelect";
 
@@ -27,6 +27,7 @@ export function ControlPanel({
     // --- Settings Logic ---
     const [ports, setPorts] = useState<SerialPortInfo[]>([]);
     const [loading, setLoading] = useState(false);
+    const [showConfig, setShowConfig] = useState(false);
 
     const refreshPorts = async () => {
         setLoading(true);
@@ -163,35 +164,58 @@ export function ControlPanel({
                     ))}
                 </select>
 
-                {/* Extra Settings (Compact) */}
-                <div className="flex items-center gap-1 border-l border-r border-border/50 px-2 mx-1">
-                    <select
-                        className="h-7 w-20 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
-                        value={config.data_bits}
-                        onChange={(e) => handleChange("data_bits", parseInt(e.target.value))}
-                        title="Data Bits"
+                {/* Extra Settings (Compact Popover) */}
+                <div className="relative flex items-center border-l border-r border-border/50 px-2 mx-1">
+                    <button
+                        onClick={() => setShowConfig(!showConfig)}
+                        className="h-7 px-2 rounded border border-input bg-background hover:bg-accent flex items-center gap-1 text-xs font-mono"
+                        title="Serial Configuration (Data Bits / Stop Bits / Parity)"
                     >
-                        {[5, 6, 7, 8].map(b => <option key={b} value={b}>{b} bit</option>)}
-                    </select>
-                    <select
-                        className="h-7 w-20 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
-                        value={config.stop_bits}
-                        onChange={(e) => handleChange("stop_bits", parseInt(e.target.value))}
-                        title="Stop Bits"
-                    >
-                        <option value={1}>1 stop</option>
-                        <option value={2}>2 stop</option>
-                    </select>
-                    <select
-                        className="h-7 w-24 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
-                        value={config.parity}
-                        onChange={(e) => handleChange("parity", e.target.value)}
-                        title="Parity"
-                    >
-                        <option value="None">No Parity</option>
-                        <option value="Odd">Odd</option>
-                        <option value="Even">Even</option>
-                    </select>
+                        {config.data_bits}
+                        {config.parity === 'None' ? 'N' : config.parity.charAt(0)}
+                        {config.stop_bits}
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                    </button>
+
+                    {showConfig && (
+                        <>
+                            <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => setShowConfig(false)}
+                            />
+                            <div className="absolute bottom-full left-0 mb-1 p-2 bg-popover border border-border rounded shadow-md flex flex-col gap-2 z-50 min-w-[140px]">
+                                <label className="text-[10px] text-muted-foreground font-medium">Data Bits</label>
+                                <select
+                                    className="h-7 w-full rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                                    value={config.data_bits}
+                                    onChange={(e) => handleChange("data_bits", parseInt(e.target.value))}
+                                >
+                                    {[5, 6, 7, 8].map(b => <option key={b} value={b}>{b} bit</option>)}
+                                </select>
+
+                                <label className="text-[10px] text-muted-foreground font-medium">Stop Bits</label>
+                                <select
+                                    className="h-7 w-full rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                                    value={config.stop_bits}
+                                    onChange={(e) => handleChange("stop_bits", parseInt(e.target.value))}
+                                >
+                                    <option value={1}>1 stop</option>
+                                    <option value={2}>2 stop</option>
+                                </select>
+
+                                <label className="text-[10px] text-muted-foreground font-medium">Parity</label>
+                                <select
+                                    className="h-7 w-full rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                                    value={config.parity}
+                                    onChange={(e) => handleChange("parity", e.target.value)}
+                                >
+                                    <option value="None">No Parity</option>
+                                    <option value="Odd">Odd</option>
+                                    <option value="Even">Even</option>
+                                </select>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Connect Button */}
