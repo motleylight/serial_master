@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use serialport::SerialPort;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use log::{info, error};
@@ -8,6 +9,7 @@ use log::{info, error};
 pub struct SerialManager {
     port: Arc<Mutex<Option<Box<dyn SerialPort>>>>,
     tx: Option<mpsc::Sender<Vec<u8>>>,
+    should_run: Arc<AtomicBool>,
 }
 
 impl SerialManager {
@@ -15,6 +17,7 @@ impl SerialManager {
         Self {
             port: Arc::new(Mutex::new(None)),
             tx: None,
+            should_run: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -38,11 +41,19 @@ impl SerialManager {
 
         let mut port_clone = port.try_clone().map_err(|e| anyhow!("Failed to clone port: {}", e))?;
         
+        // Reset run flag
+        self.should_run.store(true, Ordering::SeqCst);
+        let should_run = self.should_run.clone();
+
         // Spawn read thread if we have a sender
         if let Some(tx) = self.tx.clone() {
             std::thread::spawn(move || {
                 let mut buf = [0u8; 1024];
                 loop {
+                    if !should_run.load(Ordering::SeqCst) {
+                        break;
+                    }
+
                     match port_clone.read(&mut buf) {
                         Ok(n) if n > 0 => {
                             let data = buf[0..n].to_vec();
@@ -77,6 +88,13 @@ impl SerialManager {
     }
 
     pub fn close(&mut self) -> Result<()> {
+        self.should_run.store(false, Ordering::SeqCst);
+        
+        // Give the read thread a moment to see the flag and exit? 
+        // Or just closing the port handle is enough? 
+        // Explicitly dropping the port handle usually causes read error in other thread, 
+        // but adding the flag ensures logical stop.
+        
         let mut guard = self.port.lock().unwrap();
         if guard.is_some() {
             *guard = None; // Drop the port

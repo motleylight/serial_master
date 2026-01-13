@@ -15,10 +15,13 @@ export interface SerialConfig {
 // Helper to check if running in Tauri
 const isTauri = () => '__TAURI_INTERNALS__' in window;
 
+// Mock state
+let mockConnected = false;
+
 export class SerialService {
     static async getPorts(): Promise<SerialPortInfo[]> {
         if (!isTauri()) {
-            return ["MOCK_COM1", "MOCK_COM2"];
+            return ["COM3", "COM9"];
         }
         return invoke('get_ports');
     }
@@ -26,6 +29,7 @@ export class SerialService {
     static async connect(config: SerialConfig): Promise<void> {
         if (!isTauri()) {
             console.log("Mock Connect:", config);
+            mockConnected = true;
             return Promise.resolve();
         }
         return invoke('connect', { config });
@@ -34,6 +38,7 @@ export class SerialService {
     static async disconnect(): Promise<void> {
         if (!isTauri()) {
             console.log("Mock Disconnect");
+            mockConnected = false;
             return Promise.resolve();
         }
         return invoke('disconnect');
@@ -51,9 +56,11 @@ export class SerialService {
         if (!isTauri()) {
             // Mock data intervals
             const interval = setInterval(() => {
-                const mockData = new Uint8Array([72, 101, 108, 108, 111]); // "Hello"
-                callback(mockData);
-            }, 5000);
+                if (mockConnected) {
+                    const mockData = new Uint8Array([72, 101, 108, 108, 111]); // "Hello"
+                    callback(mockData);
+                }
+            }, 1000);
             return Promise.resolve(() => clearInterval(interval));
         }
         return listen<number[]>('serial-data', (event) => {

@@ -1,11 +1,17 @@
 {
-  "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "Default permissions for the app",
+  "local": true,
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "log:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "fs:allow-create",
+    "fs:allow-write"
   ]
 }

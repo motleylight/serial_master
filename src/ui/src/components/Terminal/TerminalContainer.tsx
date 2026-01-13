@@ -1,7 +1,10 @@
 import { useRef, useEffect, useState } from 'react';
 import { type LogData, LogEntry, type ViewMode } from './LogEntry';
 import { cn } from '../../lib/utils';
-import { ArrowDownCircle, Trash2 } from 'lucide-react';
+import { ArrowDownCircle, Trash2, Save, PanelRight } from 'lucide-react';
+import { HexSwitch } from '../ui/HexSwitch';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 
 interface TerminalContainerProps {
     logs: LogData[];
@@ -31,6 +34,33 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
         }
     };
 
+    const handleSaveLog = async () => {
+        try {
+            const path = await save({
+                filters: [{
+                    name: 'Log Files',
+                    extensions: ['txt', 'log', 'json']
+                }]
+            });
+
+            if (!path) return;
+
+            let content = '';
+            // Basic text format export
+            logs.forEach(log => {
+                const date = new Date(log.timestamp).toISOString();
+                const dataStr = (typeof log.data === 'string')
+                    ? log.data
+                    : Array.from(log.data).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                content += `[${date}] [${log.type}] ${dataStr}\n`;
+            });
+
+            await writeTextFile(path, content);
+        } catch (err) {
+            console.error('Failed to save log:', err);
+        }
+    };
+
     return (
         <div className="flex flex-col h-full w-full">
             {/* Toolbar */}
@@ -43,39 +73,40 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                     >
                         <Trash2 className="w-4 h-4 text-muted-foreground" />
                     </button>
+                    <button
+                        onClick={handleSaveLog}
+                        className="p-1 hover:bg-black/10 rounded"
+                        title="Save Log"
+                    >
+                        <Save className="w-4 h-4 text-muted-foreground" />
+                    </button>
                     <div className="h-4 w-[1px] bg-border mx-1" />
-                    <button
-                        onClick={() => setViewMode('ASCII')}
-                        className={cn(
-                            "p-1 rounded text-xs font-mono",
-                            viewMode === 'ASCII' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-black/10"
-                        )}
-                        title="ASCII View"
-                    >
-                        ASCII
-                    </button>
-                    <button
-                        onClick={() => setViewMode('HEX')}
-                        className={cn(
-                            "p-1 rounded text-xs font-mono",
-                            viewMode === 'HEX' ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-black/10"
-                        )}
-                        title="Hex View"
-                    >
-                        HEX
-                    </button>
+                    <HexSwitch
+                        checked={viewMode === 'HEX'}
+                        onChange={(checked) => setViewMode(checked ? 'HEX' : 'ASCII')}
+                        size="sm"
+                    />
                 </div>
 
-                <button
-                    onClick={() => setAutoScroll(!autoScroll)}
-                    className={cn(
-                        "p-1 rounded",
-                        autoScroll ? "text-primary" : "text-muted-foreground"
-                    )}
-                    title={autoScroll ? "Auto-scroll On" : "Auto-scroll Off"}
-                >
-                    <ArrowDownCircle className="w-4 h-4" />
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => window.dispatchEvent(new Event('toggle-sidebar'))}
+                        className="p-1 hover:bg-black/10 rounded"
+                        title="Toggle Sidebar"
+                    >
+                        <PanelRight className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    <button
+                        onClick={() => setAutoScroll(!autoScroll)}
+                        className={cn(
+                            "p-1 rounded",
+                            autoScroll ? "text-primary" : "text-muted-foreground"
+                        )}
+                        title={autoScroll ? "Auto-scroll On" : "Auto-scroll Off"}
+                    >
+                        <ArrowDownCircle className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
 
             {/* Simple Native List for Verification */}

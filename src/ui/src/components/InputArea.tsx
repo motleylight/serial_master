@@ -1,6 +1,7 @@
 import { useState, KeyboardEvent } from 'react';
 import { Send } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { HexSwitch } from './ui/HexSwitch';
 
 interface InputAreaProps {
     onSend: (data: Uint8Array | number[]) => void;
@@ -20,7 +21,10 @@ export function InputArea({ onSend, connected }: InputAreaProps) {
         // Add to history if unique or last one different
         setHistory(prev => {
             if (prev.length === 0 || prev[prev.length - 1] !== input) {
-                return [...prev, input];
+                const newHistory = [...prev, input];
+                // Limit history size to 50
+                if (newHistory.length > 50) return newHistory.slice(newHistory.length - 50);
+                return newHistory;
             }
             return prev;
         });
@@ -85,15 +89,11 @@ export function InputArea({ onSend, connected }: InputAreaProps) {
     return (
         <div className="flex flex-col gap-2 p-2 border-t border-border bg-background">
             <div className="flex gap-2 items-center text-xs">
-                <label className="flex items-center gap-1 cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={isHex}
-                        onChange={(e) => setIsHex(e.target.checked)}
-                        className="rounded border-gray-300"
-                    />
-                    <span>Hex Send</span>
-                </label>
+                <HexSwitch
+                    checked={isHex}
+                    onChange={setIsHex}
+                    size="sm"
+                />
 
                 <div className="h-3 w-[1px] bg-border mx-1" />
 
@@ -101,15 +101,13 @@ export function InputArea({ onSend, connected }: InputAreaProps) {
                 <select
                     value={appendMode}
                     onChange={(e) => setAppendMode(e.target.value as any)}
-                    className="h-6 rounded border border-input text-xs px-1"
+                    className="h-6 rounded border border-input text-xs px-1 focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                     <option value="None">None</option>
                     <option value="LF">\n (LF)</option>
                     <option value="CR">\r (CR)</option>
                     <option value="CRLF">\r\n (CRLF)</option>
                 </select>
-
-                {/* Could add Interval send here later */}
             </div>
 
             <div className="flex gap-2">
@@ -121,8 +119,7 @@ export function InputArea({ onSend, connected }: InputAreaProps) {
                         onKeyDown={handleKeyDown}
                         placeholder={isHex ? "Enter Hex (e.g. AA BB CC)" : "Enter text to send..."}
                         className={cn(
-                            "w-full h-9 px-3 py-1 text-sm border border-input rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary",
-                            isHex && "font-mono"
+                            "w-full h-9 px-3 py-1 text-sm border border-input rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary font-mono",
                         )}
                     />
                 </div>

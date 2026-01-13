@@ -4,10 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { SerialService, type SerialConfig } from './services/ipc';
 import { TerminalContainer } from './components/Terminal/TerminalContainer';
 import { type LogData } from './components/Terminal/LogEntry';
-import { SettingsPanel } from './components/SettingsPanel';
-import { InputArea } from './components/InputArea';
+import { ControlPanel } from './components/ControlPanel';
 import { CommandManager } from './components/CommandManager';
-import { PanelRightClose, Sidebar } from 'lucide-react';
+import { PanelRightClose } from 'lucide-react';
 import { cn } from './lib/utils';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -43,6 +42,7 @@ function App() {
   const [logs, setLogs] = useState<LogData[]>([]);
   const [connected, setConnected] = useState(false);
   const [showSidePanel, setShowSidePanel] = useState(true);
+  const [sidePanelWidth, setSidePanelWidth] = useState(288); // Default w-72 equivalent
 
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     port_name: '',
@@ -73,8 +73,12 @@ function App() {
       });
     });
 
+    const handleToggleSidebar = () => setShowSidePanel(prev => !prev);
+    window.addEventListener('toggle-sidebar', handleToggleSidebar);
+
     return () => {
       unlisten.then(f => f());
+      window.removeEventListener('toggle-sidebar', handleToggleSidebar);
     };
   }, []);
 
@@ -84,6 +88,12 @@ function App() {
         addSystemLog("No port selected", 'ERR');
         return;
       }
+
+      if (connected) {
+        await SerialService.disconnect();
+        setConnected(false);
+      }
+
       await SerialService.connect(serialConfig);
       setConnected(true);
       addSystemLog(`Connected to ${serialConfig.port_name} at ${serialConfig.baud_rate}`, 'SYS');
@@ -141,15 +151,6 @@ function App() {
     <ErrorBoundary>
       <Layout>
         <div className="flex flex-col h-full overflow-hidden">
-          {/* Top Settings Panel */}
-          <SettingsPanel
-            config={serialConfig}
-            setConfig={setSerialConfig}
-            connected={connected}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-          />
-
           {/* Main Content Area */}
           <div className="flex-1 flex min-h-0 relative">
 
@@ -163,44 +164,74 @@ function App() {
                 </div>
               </div>
 
-              {/* Input Area */}
+              {/* Control Panel (Settings + Input) */}
               <div className="p-2 pt-0">
-                <InputArea onSend={handleSend} connected={connected} />
+                <ControlPanel
+                  config={serialConfig}
+                  setConfig={setSerialConfig}
+                  connected={connected}
+                  onConnect={handleConnect}
+                  onDisconnect={handleDisconnect}
+                  onSend={handleSend}
+                />
               </div>
             </div>
 
-            {/* Side Panel (Command Manager) */}
+            {/* Drag Handle */}
+
+            {/* Drag Handle */}
             <div
               className={cn(
-                "border-l border-border bg-background transition-all duration-300 ease-in-out flex flex-col",
-                showSidePanel ? "w-72" : "w-0 opacity-0 overflow-hidden"
+                "w-1 bg-border/50 hover:bg-primary/50 cursor-col-resize z-20 flex items-center justify-center transition-colors touch-none",
+                !showSidePanel && "hidden"
+              )}
+              onMouseDown={(e) => {
+                const startX = e.clientX;
+                const startWidth = sidePanelWidth;
+
+                const handleMouseMove = (moveEvent: MouseEvent) => {
+                  const newWidth = Math.max(200, Math.min(600, startWidth + (startX - moveEvent.clientX)));
+                  setSidePanelWidth(newWidth);
+                };
+
+                const handleMouseUp = () => {
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                  document.body.style.cursor = 'default';
+                  document.body.style.userSelect = 'auto';
+                };
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none'; // Prevent text selection
+              }}
+            />
+
+            {/* Side Panel (Command Manager) */}
+            <div
+              style={{ width: showSidePanel ? sidePanelWidth : 0 }}
+              className={cn(
+                "border-l border-border bg-background flex flex-col transition-[width] duration-0 ease-linear", // Disable transition during drag
+                !showSidePanel && "overflow-hidden border-l-0"
               )}
             >
-              <div className="h-full p-2">
+              <div className="h-full p-2 relative">
+                {/* Close Button Inside Panel */}
+                {/* Close Button Inside Panel - Removed as it overlaps and is redundant with the Toolbar Toggle */}
+
                 <CommandManager onSend={handleSend} connected={connected} />
               </div>
             </div>
 
-            {/* Toggle Side Panel Button */}
-            <div className="absolute top-2 right-2 z-10">
-              {!showSidePanel && (
-                <button
-                  onClick={() => setShowSidePanel(true)}
-                  className="p-1 bg-background border border-border rounded-md shadow hover:bg-muted"
-                  title="Show Command Panel"
-                >
-                  <Sidebar className="w-4 h-4 text-muted-foreground" />
-                </button>
-              )}
-            </div>
-            {showSidePanel && (
-              <button
-                onClick={() => setShowSidePanel(false)}
-                className="absolute top-3 right-3 z-10 p-1 hover:bg-black/10 rounded"
-                title="Hide Command Panel"
-              >
-                <PanelRightClose className="w-3.5 h-3.5 text-muted-foreground/50" />
-              </button>
+            {/* Toggle Side Panel Button - Replaced by event listener in Terminal Toolbar */}
+            {/* Logic handled via window event dispatch from TerminalContainer */}
+
+            {/* Mock Mode Indicator */}
+            {window.location.protocol.startsWith('http') && !('__TAURI_INTERNALS__' in window) && (
+              <div className="absolute bottom-1 right-1 pointer-events-none opacity-50 bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded border border-yellow-200">
+                MOCK MODE
+              </div>
             )}
 
           </div>
