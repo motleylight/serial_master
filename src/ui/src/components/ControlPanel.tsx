@@ -32,8 +32,10 @@ export function ControlPanel({
         try {
             const availablePorts = await SerialService.getPorts();
             setPorts(availablePorts);
-            if (availablePorts.length > 0 && (!config.port_name || !availablePorts.includes(config.port_name))) {
-                handleChange("port_name", availablePorts[0]);
+            // Auto-select first if none selected or current not invalid
+            const currentIsValid = availablePorts.some(p => p.port_name === config.port_name);
+            if (availablePorts.length > 0 && (!config.port_name || !currentIsValid)) {
+                handleChange("port_name", availablePorts[0].port_name);
             }
         } catch (error) {
             console.error("Failed to list ports:", error);
@@ -130,16 +132,19 @@ export function ControlPanel({
                 {/* Port */}
                 <div className="flex items-center gap-1">
                     <select
-                        className="h-7 w-28 rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="h-7 w-60 rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
                         value={config.port_name}
-                        disabled={connected}
                         onChange={(e) => handleChange("port_name", e.target.value)}
+                        title={config.port_name}
                     >
-                        {ports.map((port) => <option key={port} value={port}>{port}</option>)}
+                        {ports.map((port) => (
+                            <option key={port.port_name} value={port.port_name}>
+                                {port.port_name}{port.product_name ? ` (${port.product_name})` : ''}
+                            </option>
+                        ))}
                     </select>
                     <button
                         onClick={refreshPorts}
-                        disabled={connected || loading}
                         className="h-7 w-7 inline-flex items-center justify-center rounded border border-border bg-background hover:bg-accent disabled:opacity-50"
                         title="Refresh Ports"
                     >
@@ -151,7 +156,6 @@ export function ControlPanel({
                 <select
                     className="h-7 w-24 rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
                     value={config.baud_rate}
-                    disabled={connected}
                     onChange={(e) => handleChange("baud_rate", parseInt(e.target.value))}
                 >
                     {[9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600].map((rate) => (
@@ -162,18 +166,16 @@ export function ControlPanel({
                 {/* Extra Settings (Compact) */}
                 <div className="flex items-center gap-1 border-l border-r border-border/50 px-2 mx-1">
                     <select
-                        className="h-7 w-16 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="h-7 w-20 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
                         value={config.data_bits}
-                        disabled={connected}
                         onChange={(e) => handleChange("data_bits", parseInt(e.target.value))}
                         title="Data Bits"
                     >
                         {[5, 6, 7, 8].map(b => <option key={b} value={b}>{b} bit</option>)}
                     </select>
                     <select
-                        className="h-7 w-16 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="h-7 w-20 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
                         value={config.stop_bits}
-                        disabled={connected}
                         onChange={(e) => handleChange("stop_bits", parseInt(e.target.value))}
                         title="Stop Bits"
                     >
@@ -181,9 +183,8 @@ export function ControlPanel({
                         <option value={2}>2 stop</option>
                     </select>
                     <select
-                        className="h-7 w-20 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="h-7 w-24 rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-primary"
                         value={config.parity}
-                        disabled={connected}
                         onChange={(e) => handleChange("parity", e.target.value)}
                         title="Parity"
                     >

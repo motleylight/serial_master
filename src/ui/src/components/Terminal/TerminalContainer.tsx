@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { type LogData, LogEntry, type ViewMode } from './LogEntry';
 import { cn } from '../../lib/utils';
-import { ArrowDownCircle, Trash2, Save, PanelRight } from 'lucide-react';
+import { Trash2, Save, PanelRight } from 'lucide-react';
 import { HexSwitch } from '../ui/HexSwitch';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
@@ -99,12 +99,14 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                     <button
                         onClick={() => setAutoScroll(!autoScroll)}
                         className={cn(
-                            "p-1 rounded",
-                            autoScroll ? "text-primary" : "text-muted-foreground"
+                            "px-2 py-0.5 rounded text-[10px] font-medium border border-transparent transition-colors",
+                            autoScroll
+                                ? "bg-primary/10 text-primary border-primary/20"
+                                : "text-muted-foreground hover:bg-black/5 hover:text-gray-900"
                         )}
-                        title={autoScroll ? "Auto-scroll On" : "Auto-scroll Off"}
+                        title={autoScroll ? "Disable Auto-scroll" : "Enable Auto-scroll"}
                     >
-                        <ArrowDownCircle className="w-4 h-4" />
+                        Auto Scroll
                     </button>
                 </div>
             </div>

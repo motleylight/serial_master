@@ -1,8 +1,8 @@
 use serial_master::core::serial_manager::SerialManager;
 use tauri::State;
 use tokio::sync::Mutex;
-use serde::Deserialize;
-use serialport::{DataBits, FlowControl, Parity, StopBits};
+use serde::{Deserialize, Serialize};
+use serialport::{DataBits, FlowControl, Parity, StopBits, SerialPortType};
 
 // Generic helper to map any error to String
 fn to_string_err(e: impl std::fmt::Display) -> String {
@@ -53,13 +53,51 @@ impl SerialConfig {
     }
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct PortInfo {
+    pub port_name: String,
+    pub product_name: Option<String>,
+}
+
 #[tauri::command]
-pub async fn get_ports() -> Result<Vec<String>, String> {
-    let ports = serialport::available_ports()
+pub async fn get_ports() -> Result<Vec<PortInfo>, String> {
+    let mut ports: Vec<PortInfo> = serialport::available_ports()
         .map_err(|e: serialport::Error| e.to_string())?
         .into_iter()
-        .map(|p| p.port_name)
+        .filter(|p| !p.port_name.to_lowercase().starts_with("cnc"))
+        .map(|p| {
+            let product_name = match p.port_type {
+                SerialPortType::UsbPort(info) => info.product,
+                _ => None,
+            };
+            PortInfo {
+                port_name: p.port_name,
+                product_name,
+            }
+        })
         .collect();
+    
+    // Natural Sort (e.g., COM9 before COM10)
+    ports.sort_by(|a, b| {
+        // Extract numeric part if possible
+        let extract_num = |s: &str| -> Option<u32> {
+            s.chars()
+             .skip_while(|c| !c.is_ascii_digit())
+             .take_while(|c| c.is_ascii_digit())
+             .collect::<String>()
+             .parse::<u32>()
+             .ok()
+        };
+
+        let num_a = extract_num(&a.port_name);
+        let num_b = extract_num(&b.port_name);
+
+        match (num_a, num_b) {
+            (Some(na), Some(nb)) => na.cmp(&nb),
+            _ => a.port_name.cmp(&b.port_name),
+        }
+    });
+
     Ok(ports)
 }
 

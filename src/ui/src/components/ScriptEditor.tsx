@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
-import { X, FolderOpen, FileDown, Play } from 'lucide-react';
+import { X, Save, FolderOpen, Play } from 'lucide-react';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
@@ -149,7 +149,7 @@ export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
                             <FolderOpen className="w-4 h-4" />
                         </button>
                         <button onClick={handleSaveFile} className="p-1.5 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition-colors" title="Save to File">
-                            <FileDown className="w-4 h-4" />
+                            <Save className="w-4 h-4" />
                         </button>
                         <div className="h-6 w-[1px] bg-gray-300 mx-1"></div>
                         <button onClick={handleApply} className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors" title="Apply to Engine">

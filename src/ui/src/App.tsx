@@ -84,9 +84,10 @@ function App() {
     };
   }, []);
 
-  const handleConnect = async () => {
+  const handleConnect = async (configOverride?: SerialConfig) => {
+    const configToUse = configOverride || serialConfig;
     try {
-      if (!serialConfig.port_name) {
+      if (!configToUse.port_name) {
         addSystemLog("No port selected", 'ERR');
         return;
       }
@@ -96,9 +97,9 @@ function App() {
         setConnected(false);
       }
 
-      await SerialService.connect(serialConfig);
+      await SerialService.connect(configToUse);
       setConnected(true);
-      addSystemLog(`Connected to ${serialConfig.port_name} at ${serialConfig.baud_rate}`, 'SYS');
+      addSystemLog(`Connected to ${configToUse.port_name} at ${configToUse.baud_rate}`, 'SYS');
     } catch (e: any) {
       console.error(e);
       addSystemLog(`Connection failed: ${e.toString()}`, 'ERR');
@@ -113,6 +114,15 @@ function App() {
     } catch (e: any) {
       console.error(e);
       addSystemLog(`Disconnect failed: ${e.toString()}`, 'ERR');
+    }
+  };
+
+  const handleConfigUpdate = (newConfig: SerialConfig) => {
+    setSerialConfig(newConfig);
+    if (connected) {
+      // Hot-reload: Reconnect with new config
+      // Pass newConfig explicitly to avoid stale state
+      handleConnect(newConfig);
     }
   };
 
@@ -170,9 +180,9 @@ function App() {
               <div className="p-2 pt-0">
                 <ControlPanel
                   config={serialConfig}
-                  setConfig={setSerialConfig}
+                  setConfig={handleConfigUpdate}
                   connected={connected}
-                  onConnect={handleConnect}
+                  onConnect={() => handleConnect()}
                   onDisconnect={handleDisconnect}
                   onSend={handleSend}
                   onOpenScripting={() => setShowScriptEditor(true)}

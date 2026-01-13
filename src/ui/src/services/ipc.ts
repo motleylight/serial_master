@@ -1,7 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { type UnlistenFn, listen } from '@tauri-apps/api/event';
 
-export type SerialPortInfo = string;
+export interface SerialPortInfo {
+    port_name: string;
+    product_name?: string;
+}
+
+export type SerialPortConfig = SerialConfig; // Alias for compatibility if needed
 
 export interface SerialConfig {
     port_name: string;
@@ -21,7 +26,10 @@ let mockConnected = false;
 export class SerialService {
     static async getPorts(): Promise<SerialPortInfo[]> {
         if (!isTauri()) {
-            return ["COM3", "COM9"];
+            return [
+                { port_name: "COM3", product_name: "Mock Device A" },
+                { port_name: "COM9", product_name: "Mock Device B" }
+            ];
         }
         return invoke('get_ports');
     }
