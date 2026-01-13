@@ -67,8 +67,20 @@ pub async fn get_ports() -> Result<Vec<PortInfo>, String> {
         .filter(|p| !p.port_name.to_lowercase().starts_with("cnc"))
         .map(|p| {
             let product_name = match p.port_type {
-                SerialPortType::UsbPort(info) => info.product,
-                _ => None,
+                SerialPortType::UsbPort(info) => {
+                    let product = info.product.unwrap_or_default();
+                    let manufacturer = info.manufacturer.unwrap_or_default();
+                    if !product.is_empty() {
+                        Some(product)
+                    } else if !manufacturer.is_empty() {
+                        Some(manufacturer)
+                    } else {
+                        Some("USB Device".to_string())
+                    }
+                },
+                SerialPortType::BluetoothPort => Some("Bluetooth Device".to_string()),
+                SerialPortType::PciPort => Some("PCI Device".to_string()),
+                SerialPortType::Unknown => None,
             };
             PortInfo {
                 port_name: p.port_name,
