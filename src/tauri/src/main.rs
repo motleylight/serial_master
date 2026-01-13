@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-  serial_master_tauri_lib::run();
+  serial_master_tauri_lib::run()
 }

@@ -6,7 +6,7 @@ export type ViewMode = 'ASCII' | 'HEX' | 'MIXED';
 export interface LogData {
     id: number;
     timestamp: number;
-    type: 'RX' | 'TX' | 'SYS' | 'ERR';
+    type: 'RX' | 'TX' | 'SYS' | 'ERR' | 'SEP';
     data: Uint8Array | string;
 }
 
@@ -34,6 +34,16 @@ export const LogEntry = React.memo(({ entry, mode, style, index }: LogEntryProps
     const date = new Date(entry.timestamp);
     const timeStr = date.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + `.${date.getMilliseconds().toString().padStart(3, '0')}`;
 
+    if (entry.type === 'SEP') {
+        return (
+            <div style={style} className="flex items-center justify-center bg-gray-50/50">
+                <div className="w-full h-[1px] bg-dashed border-t border-gray-300 mx-4 relative">
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-50 px-2 text-[10px] text-gray-400">---</span>
+                </div>
+            </div>
+        );
+    }
+
     let content = '';
 
     if (typeof entry.data === 'string') {
@@ -52,7 +62,8 @@ export const LogEntry = React.memo(({ entry, mode, style, index }: LogEntryProps
         'RX': 'text-green-500',
         'TX': 'text-blue-500',
         'SYS': 'text-yellow-500',
-        'ERR': 'text-red-500 font-bold'
+        'ERR': 'text-red-500 font-bold',
+        'SEP': 'text-gray-300'
     }[entry.type];
 
     return (
