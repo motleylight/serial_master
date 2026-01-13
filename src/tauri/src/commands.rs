@@ -59,29 +59,78 @@ pub struct PortInfo {
     pub product_name: Option<String>,
 }
 
+use std::collections::HashMap;
+
+#[derive(Deserialize)]
+struct Win32SerialPort {
+    DeviceID: String,
+    Name: String,
+}
+
+fn get_win32_port_names() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    
+    // Only run on Windows
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        
+        let output = std::process::Command::new("powershell")
+            .args(&["-NoProfile", "-Command", "Get-CimInstance Win32_SerialPort | Select-Object DeviceID, Name | ConvertTo-Json"])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                // Handle single object vs array vs empty
+                if let Ok(ports) = serde_json::from_str::<Vec<Win32SerialPort>>(&stdout) {
+                    for port in ports {
+                        map.insert(port.DeviceID, port.Name);
+                    }
+                } else if let Ok(port) = serde_json::from_str::<Win32SerialPort>(&stdout) {
+                     map.insert(port.DeviceID, port.Name);
+                }
+            }
+        }
+    }
+    
+    map
+}
+
 #[tauri::command]
 pub async fn get_ports() -> Result<Vec<PortInfo>, String> {
+    let friendly_names = get_win32_port_names();
+
     let mut ports: Vec<PortInfo> = serialport::available_ports()
         .map_err(|e: serialport::Error| e.to_string())?
         .into_iter()
         .filter(|p| !p.port_name.to_lowercase().starts_with("cnc"))
         .map(|p| {
-            let product_name = match p.port_type {
-                SerialPortType::UsbPort(info) => {
-                    let product = info.product.unwrap_or_default();
-                    let manufacturer = info.manufacturer.unwrap_or_default();
-                    if !product.is_empty() {
-                        Some(product)
-                    } else if !manufacturer.is_empty() {
-                        Some(manufacturer)
-                    } else {
-                        Some("USB Device".to_string())
-                    }
-                },
-                SerialPortType::BluetoothPort => Some("Bluetooth Device".to_string()),
-                SerialPortType::PciPort => Some("PCI Device".to_string()),
-                SerialPortType::Unknown => None,
+            // Try to get name from Windows WMI first (matches Device Manager)
+            let wmi_name = friendly_names.get(&p.port_name).cloned();
+
+            // Fallback to library detection
+            let product_name = match wmi_name {
+                Some(name) => Some(name),
+                None => match p.port_type {
+                    SerialPortType::UsbPort(info) => {
+                        let product = info.product.unwrap_or_default();
+                        let manufacturer = info.manufacturer.unwrap_or_default();
+                        if !product.is_empty() {
+                            Some(product)
+                        } else if !manufacturer.is_empty() {
+                            Some(manufacturer)
+                        } else {
+                            Some("USB Device".to_string())
+                        }
+                    },
+                    SerialPortType::BluetoothPort => Some("Bluetooth Device".to_string()),
+                    SerialPortType::PciPort => Some("PCI Device".to_string()),
+                    SerialPortType::Unknown => Some("Standard Serial Port".to_string()),
+                }
             };
+            
             PortInfo {
                 port_name: p.port_name,
                 product_name,
