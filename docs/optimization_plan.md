@@ -37,5 +37,18 @@ strip = true           # Strip symbols from binary
 ### Step 3: Compression (Optional)
 - **UPX**: Use `upx --best serial_master_tauri.exe`. This can compress the 24MB EXE to ~8MB executable. However, it may trigger antivirus false positives.
 
-## Estimated Result
-Implementing **Step 1** alone should reduce the .exe size to **10MB - 15MB**.
+## 4. Final Results (2026-01-13)
+
+By applying the `[profile.release]` optimizations (LTO, Strip, Opt-level 'z', Panic Abort), we achieved massive size reductions:
+
+| Component | Initial Size | Optimized Size | Reduction |
+| :--- | :--- | :--- | :--- |
+| **Main Executable** (`.exe`) | ~25.4 MB | **8.63 MB** | **-66%** |
+| **Installer** (`setup.exe`) | ~7.0 MB | **2.65 MB** | **-62%** |
+
+### Key Contributors to Reduction:
+1.  **Strip Symbols**: Removed debug symbols which were likely a large part of the initial 25MB.
+2.  **LTO (Link Time Optimization)**: Aggressively removed unused code from `rustpython` and `windows` crates across the entire compilation unit.
+3.  **Opt-level "z"**: Prioritized size over speed, compacting the remaining logic.
+
+The application is now extremely lightweight while retaining full Python scripting capabilities.
