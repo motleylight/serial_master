@@ -6,7 +6,6 @@ import { TerminalContainer } from './components/Terminal/TerminalContainer';
 import { type LogData } from './components/Terminal/LogEntry';
 import { ControlPanel } from './components/ControlPanel';
 import { CommandManager } from './components/CommandManager';
-import { PanelRightClose } from 'lucide-react';
 import { cn } from './lib/utils';
 import { ScriptEditor } from './components/ScriptEditor';
 
