@@ -102,6 +102,7 @@ pub async fn set_script(state: State<'_, crate::scripting::ScriptManager>, scrip
     match script_type.as_str() {
         "pre_send" => state.set_pre_send_script(content),
         "post_send" => state.set_post_send_script(content),
+        "rx" => state.set_rx_script(content),
         _ => return Err(format!("Invalid script type: {}", script_type)),
     }
     Ok(())

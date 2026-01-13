@@ -24,16 +24,33 @@ pub fn run() {
             manager.set_sender(tx);
             drop(manager); // Release lock
 
+            // Retrieve ScriptManager state (it is managed, so we can get it from app)
+            // We use app.state().clone() below directly
+            let script_manager = (*app.state::<ScriptManager>()).clone();
+
             // Spawn event loop
             tauri::async_runtime::spawn(async move {
                 while let Some(data) = rx.recv().await {
-                    // Emit event to frontend
-                    println!("[Backend-Debug] Received {} bytes: {:?}", data.len(), data);
-                    if let Ok(s) = String::from_utf8(data.clone()) {
-                        println!("[Backend-Debug] String content: {}", s);
-                    }
+                    println!("[Backend-Debug] Raw Received {} bytes: {:?}", data.len(), data);
                     
-                    if let Err(e) = app_handle.emit("serial-data", data) {
+                    // Run Rx Hook
+                    let final_data = match script_manager.run_rx_script(data.clone()) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            log::error!("Rx Hook Error: {}", e);
+                            // On error, maybe we still emit original? or drop?
+                            // Let's log and keep original for safety unless empty
+                            data
+                        }
+                    };
+
+                    // If empty (filtered out), skip emit
+                    if final_data.is_empty() {
+                         continue;
+                    }
+
+                    // Emit event to frontend
+                    if let Err(e) = app_handle.emit("serial-data", final_data) {
                         log::error!("Failed to emit serial-data: {}", e);
                     }
                 }
