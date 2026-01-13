@@ -3,6 +3,7 @@ import { SerialService, SerialConfig, SerialPortInfo } from "../services/ipc";
 import { cn } from "../lib/utils";
 import { RefreshCw, Link, Link2Off, Send } from "lucide-react";
 import { HexSwitch } from "./ui/HexSwitch";
+import { PortSelect } from "./ui/PortSelect";
 
 interface ControlPanelProps {
     config: SerialConfig;
@@ -129,27 +130,26 @@ export function ControlPanel({
         <div className="flex flex-col border-t border-border bg-muted/20">
             {/* Top Row: Settings */}
             <div className="flex flex-wrap items-center gap-2 p-2 border-b border-border/50 text-xs">
-                {/* Port */}
-                <div className="flex items-center gap-1">
-                    <select
-                        className="h-7 w-60 rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
-                        value={config.port_name}
-                        onChange={(e) => handleChange("port_name", e.target.value)}
-                        title={config.port_name}
-                    >
-                        {ports.map((port) => (
-                            <option key={port.port_name} value={port.port_name}>
-                                {port.port_name}{port.product_name ? ` (${port.product_name})` : ''}
-                            </option>
-                        ))}
-                    </select>
+                {/* Port Selection (Custom Dropdown) */}
+                <div className="relative">
                     <button
-                        onClick={refreshPorts}
-                        className="h-7 w-7 inline-flex items-center justify-center rounded border border-border bg-background hover:bg-accent disabled:opacity-50"
-                        title="Refresh Ports"
-                    >
-                        <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
-                    </button>
+                        onClick={() => refreshPorts()} // Primary action left click: refresh & open? No, let's keep refresh separate.
+                        className="hidden" // Placeholder
+                    />
+                    <div className="flex items-center gap-1">
+                        <PortSelect
+                            value={config.port_name}
+                            onChange={(val) => handleChange("port_name", val)}
+                            ports={ports}
+                        />
+                        <button
+                            onClick={refreshPorts}
+                            className="h-7 w-7 inline-flex items-center justify-center rounded border border-border bg-background hover:bg-accent disabled:opacity-50"
+                            title="Refresh Ports"
+                        >
+                            <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Baud */}
