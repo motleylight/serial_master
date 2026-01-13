@@ -1,5 +1,5 @@
-# Task: Phase 2 Finalization & Release
+# Task: Release Optimization
 
-- [ ] Commit recent changes (UI Polish, Port Sorting, Permissions) <!-- id: 0 -->
-- [ ] Build Release (`npm run build` + `tauri build`) <!-- id: 1 -->
-- [ ] Verify Release Artifacts <!-- id: 2 -->
+- [x] Apply `profile.release` optimizations to `Cargo.toml` <!-- id: 0 -->
+- [x] Rebuild Release (`npx @tauri-apps/cli build`) <!-- id: 1 -->
+- [x] Verify Size Reduction <!-- id: 2 -->
