@@ -39,7 +39,7 @@ export function PortSelect({ value, onChange, ports }: PortSelectProps) {
             </button>
 
             {isOpen && (
-                <div className="absolute top-full left-0 mt-1 w-64 max-h-60 overflow-auto rounded-md border border-border bg-popover p-1 shadow-md z-50">
+                <div className="absolute bottom-full left-0 mb-1 w-64 max-h-60 overflow-auto rounded-md border border-border bg-popover p-1 shadow-md z-50">
                     {ports.length === 0 ? (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground">No ports found</div>
                     ) : (

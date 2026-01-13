@@ -63,8 +63,10 @@ use std::collections::HashMap;
 
 #[derive(Deserialize)]
 struct Win32SerialPort {
-    DeviceID: String,
-    Name: String,
+    #[serde(rename = "DeviceID")]
+    device_id: String,
+    #[serde(rename = "Name")]
+    name: String,
 }
 
 fn get_win32_port_names() -> HashMap<String, String> {
@@ -86,10 +88,10 @@ fn get_win32_port_names() -> HashMap<String, String> {
                 // Handle single object vs array vs empty
                 if let Ok(ports) = serde_json::from_str::<Vec<Win32SerialPort>>(&stdout) {
                     for port in ports {
-                        map.insert(port.DeviceID, port.Name);
+                        map.insert(port.device_id, port.name);
                     }
                 } else if let Ok(port) = serde_json::from_str::<Win32SerialPort>(&stdout) {
-                     map.insert(port.DeviceID, port.Name);
+                     map.insert(port.device_id, port.name);
                 }
             }
         }
