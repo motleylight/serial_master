@@ -129,7 +129,7 @@ export function ControlPanel({
     return (
         <div className="flex flex-col border-t border-border bg-muted/20">
             {/* Top Row: Settings */}
-            <div className="flex flex-wrap items-center gap-2 p-2 border-b border-border/50 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5 p-1.5 border-b border-border/50 text-xs">
                 {/* Port Selection (Custom Dropdown) */}
                 <div className="relative">
                     <button
@@ -197,10 +197,10 @@ export function ControlPanel({
                 {/* Connect Button */}
                 <button
                     onClick={onOpenScripting}
-                    className="ml-auto h-7 px-3 rounded flex items-center gap-1.5 font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white shadow-sm mr-2"
+                    className="ml-auto h-7 px-2 rounded flex items-center gap-1 font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white shadow-sm mr-1"
                     title="Scripting"
                 >
-                    <span className="text-xs">Scripting</span>
+                    <span className="text-xs">Script</span>
                 </button>
 
                 <button
@@ -215,11 +215,11 @@ export function ControlPanel({
             </div>
 
             {/* Bottom Row: Input & Send */}
-            <div className="flex items-center gap-3 p-2 bg-background">
+            <div className="flex items-center gap-2 p-1.5 bg-background">
                 <HexSwitch
                     checked={isHex}
                     onChange={setIsHex}
-                    size="md"
+                    size="sm"
                 />
 
                 <div className="flex items-center gap-2 flex-1">
@@ -231,7 +231,7 @@ export function ControlPanel({
                             onKeyDown={handleKeyDown}
                             placeholder={isHex ? "Enter Hex (e.g. AA BB CC)" : "Enter text to send..."}
                             className={cn(
-                                "w-full h-10 px-3 text-sm border border-input rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary",
+                                "w-full h-7 px-2 text-xs border border-input rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary",
                                 isHex && "font-mono"
                             )}
                         />
@@ -239,7 +239,7 @@ export function ControlPanel({
                             <select
                                 value={appendMode}
                                 onChange={(e) => setAppendMode(e.target.value as any)}
-                                className="h-8 text-[11px] bg-transparent border-none text-muted-foreground focus:ring-0 cursor-pointer hover:bg-black/5 rounded px-1"
+                                className="h-6 text-[10px] bg-transparent border-none text-muted-foreground focus:ring-0 cursor-pointer hover:bg-black/5 rounded px-1"
                                 title="Line Ending"
                             >
                                 <option value="None">None</option>
@@ -254,9 +254,9 @@ export function ControlPanel({
                 <button
                     onClick={handleSend}
                     disabled={!connected || !input}
-                    className="h-10 px-6 bg-primary text-primary-foreground rounded shadow hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 font-medium transition-colors"
+                    className="h-7 px-4 bg-primary text-primary-foreground rounded shadow hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5 font-medium transition-colors text-xs"
                 >
-                    Send <Send className="w-4 h-4" />
+                    Send <Send className="w-3 h-3" />
                 </button>
             </div>
         </div>
