@@ -76,7 +76,7 @@ fn get_win32_port_names() -> HashMap<String, String> {
         use std::os::windows::process::CommandExt;
         
         let output = std::process::Command::new("powershell")
-            .args(&["-NoProfile", "-Command", "Get-CimInstance Win32_SerialPort | Select-Object DeviceID, Name | ConvertTo-Json"])
+            .args(&["-NoProfile", "-Command", "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-CimInstance Win32_SerialPort | Select-Object DeviceID, Name | ConvertTo-Json"])
             .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output();
 
