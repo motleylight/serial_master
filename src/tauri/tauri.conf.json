@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "SerialMaster",
-        "width": 1200,
-        "height": 800,
+        "width": 1100,
+        "height": 768,
         "resizable": true,
         "fullscreen": false
       }
