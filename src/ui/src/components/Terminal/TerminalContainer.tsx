@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { type LogData, LogEntry, type ViewMode } from './LogEntry';
+import { type LogData, type HighlightRange, LogEntry, type ViewMode } from './LogEntry';
 import { cn } from '../../lib/utils';
-import { Trash2, Save, PanelRight, Search, Replace } from 'lucide-react';
+import { Trash2, Save, PanelRight, Search, ChevronUp, ChevronDown, ChevronRight, WrapText } from 'lucide-react';
 import { HexSwitch } from '../ui/HexSwitch';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
@@ -15,20 +15,172 @@ interface TerminalContainerProps {
 }
 
 const ROW_HEIGHT = 24;
+const MAX_CROSS_LINES = 5;
 
-// Reusable TextDecoder instance for performance
 const textDecoder = new TextDecoder();
 
-// Row props type for react-window v2
+type SearchMode = 'search' | 'filter';
+
+interface MatchResult {
+    logIndex: number;
+    highlights: HighlightRange[];
+}
+
+const getLogText = (log: LogData): string => {
+    if (typeof log.data === 'string') {
+        return log.data;
+    }
+    return textDecoder.decode(log.data);
+};
+
+const normalizeLineEndings = (text: string): string => {
+    return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+};
+
+// 普通字符串匹配
+const findSimpleMatches = (
+    logs: LogData[],
+    searchStr: string,
+    caseSensitive: boolean
+): Map<number, MatchResult> => {
+    const results = new Map<number, MatchResult>();
+    const needle = caseSensitive ? searchStr : searchStr.toLowerCase();
+
+    for (let i = 0; i < logs.length; i++) {
+        const text = normalizeLineEndings(getLogText(logs[i]));
+        const haystack = caseSensitive ? text : text.toLowerCase();
+        const highlights: HighlightRange[] = [];
+
+        let pos = 0;
+        while ((pos = haystack.indexOf(needle, pos)) !== -1) {
+            highlights.push({
+                start: pos,
+                end: pos + searchStr.length
+            });
+            pos += searchStr.length || 1;
+        }
+
+        if (highlights.length > 0) {
+            results.set(i, { logIndex: i, highlights });
+        }
+    }
+
+    return results;
+};
+
+// 单行正则匹配
+const findSingleLineMatches = (
+    logs: LogData[],
+    pattern: RegExp
+): Map<number, MatchResult> => {
+    const results = new Map<number, MatchResult>();
+
+    for (let i = 0; i < logs.length; i++) {
+        const text = normalizeLineEndings(getLogText(logs[i]));
+        const highlights: HighlightRange[] = [];
+
+        pattern.lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+            highlights.push({
+                start: match.index,
+                end: match.index + match[0].length
+            });
+            if (match[0].length === 0) pattern.lastIndex++;
+        }
+
+        if (highlights.length > 0) {
+            results.set(i, { logIndex: i, highlights });
+        }
+    }
+
+    return results;
+};
+
+// 跨行正则匹配
+const findCrossLineMatches = (
+    logs: LogData[],
+    pattern: RegExp
+): Map<number, MatchResult> => {
+    const results = new Map<number, MatchResult>();
+    const addedHighlights = new Map<number, Set<string>>();
+
+    for (let start = 0; start < logs.length; start++) {
+        let windowText = '';
+        const lineRanges: { logIdx: number; start: number; end: number }[] = [];
+
+        for (let i = start; i < Math.min(start + MAX_CROSS_LINES, logs.length); i++) {
+            const lineStart = windowText.length;
+            const text = normalizeLineEndings(getLogText(logs[i]));
+            windowText += text;
+            const lineEnd = windowText.length;
+            lineRanges.push({ logIdx: i, start: lineStart, end: lineEnd });
+
+            if (!text.endsWith('\n')) {
+                windowText += '\n';
+            }
+        }
+
+        pattern.lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(windowText)) !== null) {
+            const matchStart = match.index;
+            const matchEnd = match.index + match[0].length;
+
+            for (const range of lineRanges) {
+                const overlapStart = Math.max(matchStart, range.start);
+                const overlapEnd = Math.min(matchEnd, range.end);
+
+                if (overlapStart < overlapEnd) {
+                    const highlight: HighlightRange = {
+                        start: overlapStart - range.start,
+                        end: overlapEnd - range.start
+                    };
+
+                    const highlightKey = `${highlight.start}-${highlight.end}`;
+                    if (!addedHighlights.has(range.logIdx)) {
+                        addedHighlights.set(range.logIdx, new Set());
+                    }
+                    const lineHighlights = addedHighlights.get(range.logIdx)!;
+
+                    if (!lineHighlights.has(highlightKey)) {
+                        lineHighlights.add(highlightKey);
+
+                        if (results.has(range.logIdx)) {
+                            results.get(range.logIdx)!.highlights.push(highlight);
+                        } else {
+                            results.set(range.logIdx, {
+                                logIndex: range.logIdx,
+                                highlights: [highlight]
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (match[0].length === 0) pattern.lastIndex++;
+        }
+    }
+
+    return results;
+};
+
 interface LogRowProps {
     logs: LogData[];
     viewMode: ViewMode;
+    matchResults: Map<number, MatchResult>;
+    currentMatchIndex: number;
+    matchedLogIndices: number[];
+    wordWrap: boolean;
 }
 
-// Row component for react-window v2 - must be defined outside to avoid recreation
-const LogRow = ({ index, style, logs, viewMode }: RowComponentProps<LogRowProps>) => {
+const LogRow = ({ index, style, logs, viewMode, matchResults, currentMatchIndex, matchedLogIndices, wordWrap }: RowComponentProps<LogRowProps>) => {
     const log = logs[index];
     if (!log) return null;
+
+    const matchResult = matchResults.get(index);
+    const isCurrentMatch = matchedLogIndices[currentMatchIndex] === index;
+
     return (
         <LogEntry
             key={log.id}
@@ -36,6 +188,9 @@ const LogRow = ({ index, style, logs, viewMode }: RowComponentProps<LogRowProps>
             entry={log}
             style={style}
             mode={viewMode}
+            highlights={matchResult?.highlights}
+            isCurrentMatch={isCurrentMatch}
+            wordWrap={wordWrap}
         />
     );
 };
@@ -43,33 +198,37 @@ const LogRow = ({ index, style, logs, viewMode }: RowComponentProps<LogRowProps>
 export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => {
     const [autoScroll, setAutoScroll] = useState(true);
     const [viewMode, setViewMode] = useState<ViewMode>('ASCII');
-
-    // Filter & Replace State
-    const [filterText, setFilterText] = useState('');
+    const [searchMode, setSearchMode] = useState<SearchMode>('search');
+    const [searchText, setSearchText] = useState('');
     const [replaceText, setReplaceText] = useState('');
-    const [showReplace, setShowReplace] = useState(false);
     const [contextLines, setContextLines] = useState(0);
+    const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
-    // Debounce inputs to prevent lag on every keystroke
-    const debouncedFilterText = useDebounce(filterText, 300);
+    // 匹配选项
+    const [isRegex, setIsRegex] = useState(true);
+    const [caseSensitive, setCaseSensitive] = useState(false);
+    const [enableCrossLine, setEnableCrossLine] = useState(false);
+
+    // 展开替换行（VSCode 风格）
+    const [showReplace, setShowReplace] = useState(false);
+    const [wordWrap, setWordWrap] = useState(false);
+
+    const debouncedSearchText = useDebounce(searchText, 300);
     const debouncedReplaceText = useDebounce(replaceText, 300);
     const debouncedContextLines = useDebounce(contextLines, 300);
 
     const [isRegexValid, setIsRegexValid] = useState(true);
 
-    // Use standard useRef for ListImperativeAPI
     const listRef = useRef<ListImperativeAPI>(null);
-
-    // Track if scroll was triggered by program (not user)
     const isProgrammaticScrollRef = useRef(false);
-    // Throttle scroll handling
     const scrollThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // 用户手动切换 autoScroll 后的冷却时间，防止 handleRowsRendered 覆盖用户选择
+    const userManualOverrideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Validate regex separately (not in useMemo)
     useEffect(() => {
-        if (debouncedFilterText) {
+        if (isRegex && debouncedSearchText) {
             try {
-                new RegExp(debouncedFilterText, 'i');
+                new RegExp(debouncedSearchText, caseSensitive ? 'g' : 'gi');
                 setIsRegexValid(true);
             } catch {
                 setIsRegexValid(false);
@@ -77,42 +236,59 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
         } else {
             setIsRegexValid(true);
         }
-    }, [debouncedFilterText]);
+    }, [debouncedSearchText, isRegex, caseSensitive]);
 
-    // Filter Logic - now without setState inside
-    const filteredLogs = useMemo(() => {
+    const matchResults = useMemo((): Map<number, MatchResult> => {
+        if (!debouncedSearchText || viewMode === 'HEX') {
+            return new Map();
+        }
+
+        if (!isRegex) {
+            return findSimpleMatches(logs, debouncedSearchText, caseSensitive);
+        }
+
+        if (!isRegexValid) {
+            return new Map();
+        }
+
+        try {
+            const flags = caseSensitive ? 'g' : 'gi';
+            const regex = new RegExp(debouncedSearchText, flags);
+            return enableCrossLine
+                ? findCrossLineMatches(logs, regex)
+                : findSingleLineMatches(logs, regex);
+        } catch {
+            return new Map();
+        }
+    }, [logs, debouncedSearchText, isRegex, isRegexValid, caseSensitive, viewMode, enableCrossLine]);
+
+    const matchedLogIndices = useMemo(() => {
+        return Array.from(matchResults.keys()).sort((a, b) => a - b);
+    }, [matchResults]);
+
+    useEffect(() => {
+        setCurrentMatchIndex(0);
+    }, [matchedLogIndices.length]);
+
+    const { filterResult, filterIndexMap } = useMemo(() => {
+        if (!debouncedSearchText) {
+            return { filterResult: logs, filterIndexMap: null };
+        }
+
+        const matchIndices = new Set(matchResults.keys());
+        if (matchIndices.size === 0) {
+            return { filterResult: [] as LogData[], filterIndexMap: new Map<number, number>() };
+        }
+
         let regex: RegExp | null = null;
-        if (debouncedFilterText) {
+        if (isRegex && isRegexValid) {
             try {
-                regex = new RegExp(debouncedFilterText, 'i');
+                regex = new RegExp(debouncedSearchText, caseSensitive ? 'g' : 'gi');
             } catch {
-                return logs; // Return original logs if regex is invalid
+                // ignore
             }
         }
 
-        if (!regex) return logs;
-
-        // 1. Identify matches with cached string conversions
-        const matchIndices = new Set<number>();
-        const logContentStrings = new Map<number, string>();
-
-        logs.forEach((log, index) => {
-            let textContent = '';
-            if (typeof log.data === 'string') {
-                textContent = log.data;
-            } else {
-                textContent = textDecoder.decode(log.data);
-            }
-            logContentStrings.set(index, textContent);
-
-            if (regex!.test(textContent)) {
-                matchIndices.add(index);
-            }
-        });
-
-        if (matchIndices.size === 0) return [];
-
-        // 2. Expand Context
         const linesToShow = new Set<number>();
         const ctx = Math.max(0, debouncedContextLines);
 
@@ -126,12 +302,11 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
 
         const sortedIndices = Array.from(linesToShow).sort((a, b) => a - b);
         const result: LogData[] = [];
-
-        // 3. Build Result with Separators and Replacement
+        const indexMap = new Map<number, number>();
         let prevIdx = -1;
 
         sortedIndices.forEach(idx => {
-            if (prevIdx !== -1 && idx > prevIdx + 1) {
+            if (ctx > 0 && prevIdx !== -1 && idx > prevIdx + 1) {
                 result.push({
                     id: -Math.random(),
                     timestamp: 0,
@@ -145,68 +320,146 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
             const isDirectMatch = matchIndices.has(idx);
             let modifiedLog = log;
 
-            if (isDirectMatch && showReplace && debouncedReplaceText) {
+            if (isDirectMatch && showReplace && debouncedReplaceText && regex) {
                 try {
-                    const textContent = logContentStrings.get(idx) || "";
-                    const newContent = textContent.replace(regex!, debouncedReplaceText);
+                    const textContent = getLogText(log);
+                    const newContent = textContent.replace(regex, debouncedReplaceText);
                     modifiedLog = { ...log, data: newContent };
                 } catch {
-                    // ignore replace error
+                    // ignore
                 }
             }
 
+            indexMap.set(idx, result.length);
             result.push(modifiedLog);
         });
 
-        return result;
-    }, [logs, debouncedFilterText, debouncedReplaceText, showReplace, debouncedContextLines]);
+        return { filterResult: result, filterIndexMap: indexMap };
+    }, [logs, debouncedSearchText, debouncedReplaceText, showReplace, debouncedContextLines, matchResults, isRegex, isRegexValid, caseSensitive]);
 
-    // Auto-scroll to bottom when new logs come in
-    useEffect(() => {
-        if (autoScroll && listRef.current && filteredLogs.length > 0) {
+    const displayLogs = searchMode === 'filter' ? filterResult : logs;
+
+    const displayMatchResults = useMemo((): Map<number, MatchResult> => {
+        if (searchMode !== 'filter' || !filterIndexMap) {
+            return matchResults;
+        }
+
+        const newResults = new Map<number, MatchResult>();
+        matchResults.forEach((result, origIdx) => {
+            const newIdx = filterIndexMap.get(origIdx);
+            if (newIdx !== undefined) {
+                newResults.set(newIdx, {
+                    ...result,
+                    logIndex: newIdx
+                });
+            }
+        });
+
+        return newResults;
+    }, [searchMode, filterIndexMap, matchResults]);
+
+    const displayMatchedLogIndices = useMemo(() => {
+        return Array.from(displayMatchResults.keys()).sort((a, b) => a - b);
+    }, [displayMatchResults]);
+
+    const goToNextMatch = useCallback(() => {
+        const indices = displayMatchedLogIndices;
+        if (indices.length === 0) return;
+
+        const newIndex = (currentMatchIndex + 1) % indices.length;
+        setCurrentMatchIndex(newIndex);
+
+        if (listRef.current) {
             isProgrammaticScrollRef.current = true;
             listRef.current.scrollToRow({
-                index: filteredLogs.length - 1,
-                align: 'end',
-                behavior: 'auto'
+                index: indices[newIndex],
+                align: 'center',
+                behavior: 'smooth'
             });
-            // Reset flag after a short delay
             requestAnimationFrame(() => {
                 isProgrammaticScrollRef.current = false;
             });
         }
-    }, [filteredLogs.length, autoScroll]);
+    }, [currentMatchIndex, displayMatchedLogIndices]);
 
-    // Handle visible rows change to detect user scrolling away from bottom
+    const goToPrevMatch = useCallback(() => {
+        const indices = displayMatchedLogIndices;
+        if (indices.length === 0) return;
+
+        const newIndex = (currentMatchIndex - 1 + indices.length) % indices.length;
+        setCurrentMatchIndex(newIndex);
+
+        if (listRef.current) {
+            isProgrammaticScrollRef.current = true;
+            listRef.current.scrollToRow({
+                index: indices[newIndex],
+                align: 'center',
+                behavior: 'smooth'
+            });
+            requestAnimationFrame(() => {
+                isProgrammaticScrollRef.current = false;
+            });
+        }
+    }, [currentMatchIndex, displayMatchedLogIndices]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'F3' || (e.key === 'Enter' && document.activeElement?.tagName === 'INPUT')) {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    goToPrevMatch();
+                } else {
+                    goToNextMatch();
+                }
+            } else if (e.key === 'Escape') {
+                setSearchText('');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [goToNextMatch, goToPrevMatch]);
+
+    useEffect(() => {
+        if (autoScroll && listRef.current && displayLogs.length > 0) {
+            isProgrammaticScrollRef.current = true;
+            listRef.current.scrollToRow({
+                index: displayLogs.length - 1,
+                align: 'end',
+                behavior: 'auto'
+            });
+            requestAnimationFrame(() => {
+                isProgrammaticScrollRef.current = false;
+            });
+        }
+    }, [displayLogs.length, autoScroll]);
+
     const handleRowsRendered = useCallback((
         visibleRows: { startIndex: number; stopIndex: number },
         _allRows: { startIndex: number; stopIndex: number }
     ) => {
-        // Skip if this is a programmatic scroll
         if (isProgrammaticScrollRef.current) return;
-
-        // Skip if no logs
-        if (filteredLogs.length === 0) return;
-
-        // Throttle the state update to prevent excessive renders
+        if (userManualOverrideRef.current) return; // Skip auto-logic if user just clicked manually
+        if (displayLogs.length === 0) return;
         if (scrollThrottleRef.current) return;
 
         scrollThrottleRef.current = setTimeout(() => {
             scrollThrottleRef.current = null;
 
-            // Check if user is viewing the last few rows (near bottom)
-            const lastVisibleIndex = visibleRows.stopIndex;
-            const lastLogIndex = filteredLogs.length - 1;
-            const isNearBottom = lastLogIndex - lastVisibleIndex <= 2; // Within 2 rows of bottom
+            // Double check inside timeout in case it was scheduled before manual override
+            if (userManualOverrideRef.current) return;
 
-            // Only update state if it changed
+            const lastVisibleIndex = visibleRows.stopIndex;
+            const lastLogIndex = displayLogs.length - 1;
+            const isNearBottom = lastLogIndex - lastVisibleIndex <= 2;
+
             setAutoScroll(prev => {
                 if (prev && !isNearBottom) return false;
                 if (!prev && isNearBottom) return true;
                 return prev;
             });
-        }, 50); // Shorter throttle for more responsive detection
-    }, [filteredLogs.length]);
+        }, 50);
+    }, [displayLogs.length]);
 
     const handleSaveLog = async () => {
         try {
@@ -220,10 +473,8 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
             if (!path) return;
 
             let content = '';
-            const logsToExport = filteredLogs || logs;
-            logsToExport.forEach(log => {
+            displayLogs.forEach(log => {
                 if (log.type === 'SEP') return;
-
                 const date = new Date(log.timestamp).toISOString();
                 let dataStr = '';
                 if (typeof log.data === 'string') {
@@ -240,123 +491,251 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
         }
     };
 
-    // Memoize row props to prevent unnecessary re-renders
     const rowProps = useMemo<LogRowProps>(() => ({
-        logs: filteredLogs,
-        viewMode
-    }), [filteredLogs, viewMode]);
+        logs: displayLogs,
+        viewMode,
+        matchResults: displayMatchResults,
+        currentMatchIndex,
+        matchedLogIndices: displayMatchedLogIndices,
+        wordWrap: wordWrap
+    }), [displayLogs, viewMode, displayMatchResults, currentMatchIndex, displayMatchedLogIndices, wordWrap]);
+
+    const totalMatches = displayMatchedLogIndices.length;
 
     return (
         <div className="flex flex-col h-full w-full">
-            {/* Toolbar */}
-            <div className="flex items-center justify-between px-2 py-1 bg-muted border-b border-border gap-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {/* Basic Controls */}
-                    <button onClick={onClear} className="p-1 hover:bg-black/10 rounded" title="Clear Output">
-                        <Trash2 className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <button onClick={handleSaveLog} className="p-1 hover:bg-black/10 rounded" title="Save Log">
-                        <Save className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <div className="h-4 w-[1px] bg-border mx-1" />
-                    <HexSwitch
-                        checked={viewMode === 'HEX'}
-                        onChange={(checked) => setViewMode(checked ? 'HEX' : 'ASCII')}
-                        size="sm"
-                    />
+            {/* Toolbar - Grid Layout for Strict Alignment */}
+            <div className="border-b border-border bg-muted">
+                {/* Row 1: Main Controls */}
+                <div className="grid grid-cols-[180px_110px_1fr_auto_auto] items-center px-2 py-1 gap-2">
+                    {/* COL 1: LEFT CONTROLS (Fixed 180px) */}
+                    <div className="flex items-center gap-2 justify-start">
+                        <button onClick={onClear} className="p-1 hover:bg-black/10 rounded" title="Clear Output">
+                            <Trash2 className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                        <button onClick={handleSaveLog} className="p-1 hover:bg-black/10 rounded" title="Save Log">
+                            <Save className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                        <div className="h-4 w-[1px] bg-border mx-1" />
+                        <HexSwitch
+                            checked={viewMode === 'HEX'}
+                            onChange={(checked) => setViewMode(checked ? 'HEX' : 'ASCII')}
+                            size="sm"
+                        />
+                        <div className="h-4 w-[1px] bg-border mx-2" />
+                    </div>
 
-                    <div className="h-4 w-[1px] bg-border mx-1" />
+                    {/* COL 2: TOGGLE (Fixed 110px) */}
+                    <div className="flex rounded-md border border-input overflow-hidden w-full">
+                        <button
+                            onClick={() => setSearchMode('search')}
+                            disabled={viewMode === 'HEX'}
+                            className={cn(
+                                "flex-1 px-0 py-1 text-xs font-medium transition-colors text-center",
+                                "disabled:opacity-50 disabled:cursor-not-allowed",
+                                searchMode === 'search' ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                            )}
+                        >
+                            Search
+                        </button>
+                        <button
+                            onClick={() => setSearchMode('filter')}
+                            disabled={viewMode === 'HEX'}
+                            className={cn(
+                                "flex-1 px-0 py-1 text-xs font-medium transition-colors border-l border-input text-center",
+                                "disabled:opacity-50 disabled:cursor-not-allowed",
+                                searchMode === 'filter' ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                            )}
+                        >
+                            Filter
+                        </button>
+                    </div>
 
-                    {/* Filter Inputs */}
-                    <div className="flex items-center gap-1 flex-1 max-w-[500px]">
-                        <div className="relative flex-1">
-                            <Search className={cn("w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2", viewMode === 'HEX' ? "text-muted-foreground/50" : "text-muted-foreground")} />
+                    {/* COL 3: SEARCH INPUT (Flex 1fr) */}
+                    <div className="relative w-full">
+                        <Search className={cn(
+                            "w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2",
+                            viewMode === 'HEX' ? "text-muted-foreground/50" : "text-muted-foreground"
+                        )} />
+
+                        <input
+                            type="text"
+                            disabled={viewMode === 'HEX'}
+                            placeholder={viewMode === 'HEX' ? "Switch to ASCII" : (isRegex ? "Regex..." : "Text...")}
+                            title="F3 Next, Shift+F3 Prev"
+                            className={cn(
+                                "w-full h-7 pl-7 pr-[90px] text-xs rounded border bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed",
+                                !isRegexValid ? "border-red-500 focus:ring-red-500" : "border-input"
+                            )}
+                            value={searchText}
+                            onChange={e => setSearchText(e.target.value)}
+                        />
+
+                        {/* Option Buttons (Inside Input) */}
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                            <button
+                                onClick={() => setIsRegex(!isRegex)}
+                                disabled={viewMode === 'HEX'}
+                                className={cn(
+                                    "w-6 h-6 flex items-center justify-center rounded text-xs font-mono font-bold transition-colors",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    isRegex ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-black/5"
+                                )}
+                                title={isRegex ? "Regex mode" : "Plain text mode"}
+                            >
+                                .*
+                            </button>
+                            <button
+                                onClick={() => setCaseSensitive(!caseSensitive)}
+                                disabled={viewMode === 'HEX'}
+                                className={cn(
+                                    "w-6 h-6 flex items-center justify-center rounded text-xs font-bold transition-colors",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    caseSensitive ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-black/5"
+                                )}
+                                title={caseSensitive ? "Case sensitive" : "Case insensitive"}
+                            >
+                                Aa
+                            </button>
+                            <button
+                                onClick={() => setEnableCrossLine(!enableCrossLine)}
+                                disabled={viewMode === 'HEX'}
+                                className={cn(
+                                    "w-6 h-6 flex items-center justify-center rounded transition-colors",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    enableCrossLine ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-black/5"
+                                )}
+                                title={enableCrossLine ? "Cross-line allowed" : "Enable cross-line"}
+                            >
+                                <span className="font-mono text-xs font-bold">\n</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* COL 4: INFO / NAV (Auto width to remove fixed gap) */}
+                    <div className="flex items-center gap-2 justify-start overflow-hidden w-auto">
+                        {/* Match Count */}
+                        {searchText && (
+                            <span className={cn(
+                                "text-[10px] text-muted-foreground bg-black/5 px-2 py-1 rounded whitespace-nowrap text-center min-w-[3em]",
+                            )}>
+                                {searchMode === 'search'
+                                    ? (totalMatches > 0 ? `${currentMatchIndex + 1} of ${totalMatches}` : 'No results')
+                                    : `${totalMatches} results`
+                                }
+                            </span>
+                        )}
+
+                        {/* Nav Buttons (Search) OR Expand (Filter) */}
+                        {searchMode === 'search' ? (
+                            <div className="flex items-center gap-1">
+                                <button onClick={goToPrevMatch} disabled={totalMatches === 0} className="p-1 hover:bg-black/10 rounded disabled:opacity-30" title="Previous Match (Shift+F3)">
+                                    <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                                <button onClick={goToNextMatch} disabled={totalMatches === 0} className="p-1 hover:bg-black/10 rounded disabled:opacity-30" title="Next Match (F3)">
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setShowReplace(!showReplace)}
+                                disabled={viewMode === 'HEX'}
+                                className={cn(
+                                    "p-1 rounded transition-transform",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    "hover:bg-black/5"
+                                )}
+                                title={showReplace ? "Collapse advanced options" : "Expand advanced options"}
+                            >
+                                <ChevronRight className={cn(
+                                    "w-4 h-4 text-muted-foreground transition-transform",
+                                    showReplace && "rotate-90"
+                                )} />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* COL 5: RIGHT CONTROLS (Auto) */}
+                    <div className="flex items-center gap-2 justify-end w-auto">
+                        <div className="h-4 w-[1px] bg-border mx-1" />
+                        <div className="flex gap-1">
+                            <button
+                                onClick={() => setWordWrap(!wordWrap)}
+                                className={cn(
+                                    "p-1 rounded transition-colors",
+                                    wordWrap ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-black/5"
+                                )}
+                                title={wordWrap ? "Word Wrap On" : "Word Wrap Off"}
+                            >
+                                <WrapText className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setAutoScroll(!autoScroll);
+                                    // Set temporary override to ignore scroll events
+                                    if (userManualOverrideRef.current) {
+                                        clearTimeout(userManualOverrideRef.current);
+                                    }
+                                    userManualOverrideRef.current = setTimeout(() => {
+                                        userManualOverrideRef.current = null;
+                                    }, 1000);
+                                }}
+                                className={cn(
+                                    "px-2 py-0.5 rounded text-[10px] font-medium border border-transparent transition-colors whitespace-nowrap",
+                                    autoScroll ? "bg-primary/10 text-primary border-primary/20" : "text-muted-foreground hover:bg-black/5"
+                                )}
+                            >
+                                Auto Scroll
+                            </button>
+                            <button
+                                onClick={() => window.dispatchEvent(new Event('toggle-sidebar'))}
+                                className="p-1 hover:bg-black/10 rounded"
+                                title="Toggle Sidebar"
+                            >
+                                <PanelRight className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Row 2: Advanced Options (Replace) - Inherit same Grid Columns */}
+                {showReplace && (
+                    <div className="grid grid-cols-[180px_110px_1fr_auto_auto] items-center px-2 py-1 gap-2 bg-muted/50 border-t border-border/50">
+                        {/* COL 1 & 2: Empty Spacers */}
+                        <div className="col-span-2" />
+
+                        {/* COL 3: REPLACE INPUT (Matches Search Input 1fr) */}
+                        <div className="relative w-full">
+                            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
                             <input
                                 type="text"
-                                disabled={viewMode === 'HEX'}
-                                placeholder={viewMode === 'HEX' ? "Switch to ASCII to filter" : "Filter Regex..."}
-                                title={viewMode === 'HEX' ? "Filtering is disabled in HEX mode" : "Supports JS Regex. Example: Error code: (\\d+)"}
-                                className={cn(
-                                    "w-full h-7 pl-7 pr-2 text-xs rounded border bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed",
-                                    !isRegexValid ? "border-red-500 focus:ring-red-500" : "border-input"
-                                )}
-                                value={filterText}
-                                onChange={e => setFilterText(e.target.value)}
+                                disabled={viewMode === 'HEX' || searchMode !== 'filter'}
+                                placeholder={searchMode !== 'filter' ? "Filter mode only" : "Replace with..."}
+                                className="w-full h-7 pl-7 pr-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                value={replaceText}
+                                onChange={e => setReplaceText(e.target.value)}
                             />
                         </div>
 
-                        {/* Context Input */}
-                        {(filterText) && (
-                            <div className="w-12" title="Context Lines (Lines before/after match)">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    max="50"
-                                    className="w-full h-7 px-1 text-xs text-center rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                                    placeholder="Ctx"
-                                    value={contextLines || ''}
-                                    onChange={e => setContextLines(parseInt(e.target.value) || 0)}
-                                />
-                            </div>
-                        )}
+                        {/* COL 4: CTX (Auto, Justify Start) */}
+                        <div className="flex items-center gap-2 justify-start w-auto">
+                            <span className="text-xs font-medium text-muted-foreground" title="Context lines">Ctx:</span>
+                            <input
+                                type="number"
+                                min="0"
+                                max="50"
+                                disabled={searchMode !== 'filter'}
+                                className="w-12 h-7 px-1 text-xs text-center rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                value={contextLines || ''}
+                                onChange={e => setContextLines(parseInt(e.target.value) || 0)}
+                                title="Number of context lines"
+                            />
+                        </div>
 
-                        {showReplace && (
-                            <div className="relative flex-1">
-                                <Replace className={cn("w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2", viewMode === 'HEX' ? "text-muted-foreground/50" : "text-muted-foreground")} />
-                                <input
-                                    type="text"
-                                    disabled={viewMode === 'HEX'}
-                                    placeholder="Replace ($1 for match)..."
-                                    title="Use $1, $2 to reference captured groups from the filter regex"
-                                    className="w-full h-7 pl-7 pr-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
-                                    value={replaceText}
-                                    onChange={e => setReplaceText(e.target.value)}
-                                />
-                            </div>
-                        )}
-
-                        <button
-                            onClick={() => setShowReplace(!showReplace)}
-                            disabled={viewMode === 'HEX'}
-                            className={cn(
-                                "p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                                showReplace ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-black/5"
-                            )}
-                            title="Toggle Replace View"
-                        >
-                            <Replace className="w-4 h-4" />
-                        </button>
+                        {/* COL 5: Empty */}
+                        <div />
                     </div>
-                    {/* Match Count Badge */}
-                    {(filterText || replaceText) && (
-                        <span className="text-[10px] text-muted-foreground bg-black/5 px-1.5 py-0.5 rounded">
-                            {filteredLogs.length} matches
-                        </span>
-                    )}
-
-                </div>
-
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => window.dispatchEvent(new Event('toggle-sidebar'))}
-                        className="p-1 hover:bg-black/10 rounded"
-                        title="Toggle Sidebar"
-                    >
-                        <PanelRight className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <button
-                        onClick={() => setAutoScroll(!autoScroll)}
-                        className={cn(
-                            "px-2 py-0.5 rounded text-[10px] font-medium border border-transparent transition-colors",
-                            autoScroll
-                                ? "bg-primary/10 text-primary border-primary/20"
-                                : "text-muted-foreground hover:bg-black/5 hover:text-gray-900"
-                        )}
-                        title={autoScroll ? "Disable Auto-scroll" : "Enable Auto-scroll"}
-                    >
-                        Auto Scroll
-                    </button>
-                </div>
+                )}
             </div>
 
             {/* Virtualized List */}
@@ -371,7 +750,7 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                                 listRef={listRef}
                                 rowComponent={LogRow}
                                 rowProps={rowProps}
-                                rowCount={filteredLogs.length}
+                                rowCount={displayLogs.length}
                                 rowHeight={ROW_HEIGHT}
                                 className="font-mono text-xs"
                                 overscanCount={10}
@@ -382,6 +761,6 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                     }}
                 />
             </div>
-        </div>
+        </div >
     );
 };

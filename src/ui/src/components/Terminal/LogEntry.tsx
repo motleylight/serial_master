@@ -10,11 +10,19 @@ export interface LogData {
     data: Uint8Array | string;
 }
 
+export interface HighlightRange {
+    start: number;
+    end: number;
+}
+
 interface LogEntryProps {
     entry: LogData;
     mode: ViewMode;
     style: React.CSSProperties;
     index: number;
+    highlights?: HighlightRange[];
+    isCurrentMatch?: boolean;
+    wordWrap?: boolean;
 }
 
 const formatHex = (data: Uint8Array): string => {
@@ -30,7 +38,47 @@ const formatAscii = (data: Uint8Array): string => {
         .join('');
 };
 
-export const LogEntry = React.memo(({ entry, mode, style, index }: LogEntryProps) => {
+// 渲染带高亮的文本
+const renderHighlightedText = (text: string, highlights?: HighlightRange[], isCurrentMatch?: boolean): React.ReactNode => {
+    if (!highlights || highlights.length === 0) {
+        return text;
+    }
+
+    // 按起始位置排序
+    const sortedHighlights = [...highlights].sort((a, b) => a.start - b.start);
+    const result: React.ReactNode[] = [];
+    let lastEnd = 0;
+
+    sortedHighlights.forEach((hl, idx) => {
+        // 添加高亮前的普通文本
+        if (hl.start > lastEnd) {
+            result.push(text.slice(lastEnd, hl.start));
+        }
+        // 添加高亮文本
+        const highlightedText = text.slice(hl.start, hl.end);
+        result.push(
+            <mark
+                key={idx}
+                className={cn(
+                    "bg-yellow-300/70 px-0.5 rounded-sm",
+                    isCurrentMatch && idx === 0 && "ring-2 ring-orange-500 bg-orange-300/70"
+                )}
+            >
+                {highlightedText}
+            </mark>
+        );
+        lastEnd = hl.end;
+    });
+
+    // 添加最后的普通文本
+    if (lastEnd < text.length) {
+        result.push(text.slice(lastEnd));
+    }
+
+    return result;
+};
+
+export const LogEntry = React.memo(({ entry, mode, style, index, highlights, isCurrentMatch, wordWrap = false }: LogEntryProps) => {
     const date = new Date(entry.timestamp);
     const timeStr = date.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + `.${date.getMilliseconds().toString().padStart(3, '0')}`;
 
@@ -66,14 +114,21 @@ export const LogEntry = React.memo(({ entry, mode, style, index }: LogEntryProps
         'SEP': 'text-gray-300'
     }[entry.type];
 
+    // 渲染内容（带高亮或普通）
+    const renderedContent = mode === 'HEX'
+        ? content
+        : renderHighlightedText(content, highlights, isCurrentMatch);
+
     return (
         <div style={style} className={cn(
-            "flex items-center gap-2 px-2 hover:bg-black/10 font-mono text-xs whitespace-nowrap text-gray-800",
-            index % 2 === 0 ? "bg-gray-50" : "bg-white"
+            "flex items-center gap-2 px-2 hover:bg-black/10 font-mono text-xs text-gray-800",
+            wordWrap ? "whitespace-pre-wrap break-all" : "whitespace-nowrap",
+            index % 2 === 0 ? "bg-gray-50" : "bg-white",
+            isCurrentMatch && "bg-orange-50"
         )}>
             <span className="text-gray-500 opacity-70 select-none">[{timeStr}]</span>
             <span className={cn("font-bold w-8 shrink-0", typeColor)}>{entry.type}</span>
-            <span className="flex-1 truncate">{content}</span>
+            <span className={cn("flex-1", wordWrap ? "" : "truncate")}>{renderedContent}</span>
         </div>
     );
 });

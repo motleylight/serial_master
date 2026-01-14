@@ -60,7 +60,7 @@ export function PortSelect({ value, onChange, ports }: PortSelectProps) {
                                     {value === port.port_name && <Check className="ml-auto h-3 w-3" />}
                                 </div>
                                 {port.product_name && (
-                                    <span className="text-[10px] text-muted-foreground truncate w-full">
+                                    <span className="text-[10px] text-muted-foreground whitespace-normal break-words w-full">
                                         {port.product_name}
                                     </span>
                                 )}
