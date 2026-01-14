@@ -1,6 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { Layout } from './components/Layout';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { SerialService, type SerialConfig } from './services/ipc';
 import { TerminalContainer } from './components/Terminal/TerminalContainer';
 import { type LogData } from './components/Terminal/LogEntry';
@@ -38,12 +38,21 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+const MAX_LOG_COUNT = 10000;
+const BATCH_UPDATE_INTERVAL = 100; // ms
+
 function App() {
   const [logs, setLogs] = useState<LogData[]>([]);
   const [connected, setConnected] = useState(false);
   const [showSidePanel, setShowSidePanel] = useState(true);
-  const [sidePanelWidth, setSidePanelWidth] = useState(288); // Default w-72 equivalent
+  const [sidePanelWidth, setSidePanelWidth] = useState(288);
   const [showScriptEditor, setShowScriptEditor] = useState(false);
+
+  // Buffer for batch updates - reduces render frequency significantly
+  const logBufferRef = useRef<LogData[]>([]);
+  const batchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Counter for unique IDs (more reliable than Date.now() + random)
+  const logIdCounterRef = useRef(0);
 
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     port_name: '',
@@ -54,34 +63,52 @@ function App() {
     stop_bits: 1
   });
 
+  // Flush buffer to state
+  const flushLogBuffer = useCallback(() => {
+    if (logBufferRef.current.length === 0) return;
+
+    const bufferedLogs = logBufferRef.current;
+    logBufferRef.current = [];
+
+    setLogs(prev => {
+      const newLogs = [...prev, ...bufferedLogs];
+      // Trim excess logs
+      if (newLogs.length > MAX_LOG_COUNT) {
+        return newLogs.slice(newLogs.length - MAX_LOG_COUNT);
+      }
+      return newLogs;
+    });
+  }, []);
+
   useEffect(() => {
-    // Listen to data
+    // Start batch update timer
+    batchTimerRef.current = setInterval(flushLogBuffer, BATCH_UPDATE_INTERVAL);
+
+    // Listen to data - now buffers instead of immediate setState
     const unlisten = SerialService.listen((data) => {
       const newEntry: LogData = {
-        id: Date.now() + Math.random(), // Simple unique ID
+        id: ++logIdCounterRef.current,
         timestamp: Date.now(),
         type: 'RX',
         data: data
       };
-
-      setLogs(prev => {
-        // Memory safety: Limit buffer size
-        const newLogs = [...prev, newEntry];
-        if (newLogs.length > 10000) {
-          return newLogs.slice(newLogs.length - 10000);
-        }
-        return newLogs;
-      });
+      logBufferRef.current.push(newEntry);
     });
 
     const handleToggleSidebar = () => setShowSidePanel(prev => !prev);
     window.addEventListener('toggle-sidebar', handleToggleSidebar);
 
     return () => {
+      // Cleanup timer
+      if (batchTimerRef.current) {
+        clearInterval(batchTimerRef.current);
+      }
+      // Flush any remaining buffered logs
+      flushLogBuffer();
       unlisten.then(f => f());
       window.removeEventListener('toggle-sidebar', handleToggleSidebar);
     };
-  }, []);
+  }, [flushLogBuffer]);
 
   const handleConnect = async (configOverride?: SerialConfig) => {
     const configToUse = configOverride || serialConfig;

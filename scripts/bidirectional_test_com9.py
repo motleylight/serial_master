@@ -56,7 +56,7 @@ def main():
             # sys.stdout.write(f"\r[TX] Sent: {msg.strip()}   ")
             # sys.stdout.flush()
             
-            time.sleep(1.0)
+            time.sleep(0.05)
     except KeyboardInterrupt:
         print("\nStopping...")
     finally:

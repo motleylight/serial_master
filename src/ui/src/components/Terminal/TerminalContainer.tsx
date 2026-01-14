@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { type LogData, LogEntry, type ViewMode } from './LogEntry';
 import { cn } from '../../lib/utils';
 import { Trash2, Save, PanelRight, Search, Replace } from 'lucide-react';
@@ -6,11 +6,39 @@ import { HexSwitch } from '../ui/HexSwitch';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { useDebounce } from '../../hooks/useDebounce';
+import { List, type ListImperativeAPI, type RowComponentProps } from 'react-window';
+import { AutoSizer } from 'react-virtualized-auto-sizer';
 
 interface TerminalContainerProps {
     logs: LogData[];
     onClear: () => void;
 }
+
+const ROW_HEIGHT = 24;
+
+// Reusable TextDecoder instance for performance
+const textDecoder = new TextDecoder();
+
+// Row props type for react-window v2
+interface LogRowProps {
+    logs: LogData[];
+    viewMode: ViewMode;
+}
+
+// Row component for react-window v2 - must be defined outside to avoid recreation
+const LogRow = ({ index, style, logs, viewMode }: RowComponentProps<LogRowProps>) => {
+    const log = logs[index];
+    if (!log) return null;
+    return (
+        <LogEntry
+            key={log.id}
+            index={index}
+            entry={log}
+            style={style}
+            mode={viewMode}
+        />
+    );
+};
 
 export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => {
     const [autoScroll, setAutoScroll] = useState(true);
@@ -29,90 +57,51 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
 
     const [isRegexValid, setIsRegexValid] = useState(true);
 
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const endRef = useRef<HTMLDivElement>(null);
+    // Use standard useRef for ListImperativeAPI
+    const listRef = useRef<ListImperativeAPI>(null);
 
-    // Auto-scroll logic
+    // Track if scroll was triggered by program (not user)
+    const isProgrammaticScrollRef = useRef(false);
+    // Throttle scroll handling
+    const scrollThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Validate regex separately (not in useMemo)
     useEffect(() => {
-        if (autoScroll && endRef.current) {
-            endRef.current.scrollIntoView({ behavior: 'auto' });
-        }
-    }, [logs, autoScroll, debouncedFilterText, debouncedReplaceText, debouncedContextLines]); // Re-scroll on filter change
-
-    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-        const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
-        if (autoScroll && !isNearBottom) {
-            setAutoScroll(false);
-        } else if (!autoScroll && isNearBottom) {
-            setAutoScroll(true);
-        }
-    };
-
-    const handleSaveLog = async () => {
-        try {
-            const path = await save({
-                filters: [{
-                    name: 'Log Files',
-                    extensions: ['txt', 'log', 'json']
-                }]
-            });
-
-            if (!path) return;
-
-            let content = '';
-            // Export filtered logs if valid, otherwise all
-            const logsToExport = filteredLogs || logs;
-            logsToExport.forEach(log => {
-                // Skip separator logs in export
-                if (log.type === 'SEP') return;
-
-                const date = new Date(log.timestamp).toISOString();
-                let dataStr = '';
-                if (typeof log.data === 'string') {
-                    dataStr = log.data;
-                } else {
-                    // For HEX view, native export is hex string usually
-                    // But if filtered and replaced, log.data is string
-                    dataStr = Array.from(log.data).map(b => b.toString(16).padStart(2, '0')).join(' ');
-                }
-                content += `[${date}] [${log.type}] ${dataStr}\n`;
-            });
-
-            await writeTextFile(path, content);
-        } catch (err) {
-            console.error('Failed to save log:', err);
-        }
-    };
-
-    // Filter Logic
-    const filteredLogs = useMemo(() => {
-        // Validation check
-        let regex: RegExp | null = null;
         if (debouncedFilterText) {
             try {
-                regex = new RegExp(debouncedFilterText, 'i'); // Case insensitive
+                new RegExp(debouncedFilterText, 'i');
                 setIsRegexValid(true);
-            } catch (e) {
+            } catch {
                 setIsRegexValid(false);
-                return logs; // Return original logs if regex is invalid
             }
         } else {
             setIsRegexValid(true);
         }
+    }, [debouncedFilterText]);
+
+    // Filter Logic - now without setState inside
+    const filteredLogs = useMemo(() => {
+        let regex: RegExp | null = null;
+        if (debouncedFilterText) {
+            try {
+                regex = new RegExp(debouncedFilterText, 'i');
+            } catch {
+                return logs; // Return original logs if regex is invalid
+            }
+        }
 
         if (!regex) return logs;
 
-        // 1. Identify matches
+        // 1. Identify matches with cached string conversions
         const matchIndices = new Set<number>();
-        const logContentStrings = new Map<number, string>(); // Cache string conversion
+        const logContentStrings = new Map<number, string>();
 
         logs.forEach((log, index) => {
             let textContent = '';
             if (typeof log.data === 'string') {
                 textContent = log.data;
             } else {
-                textContent = new TextDecoder().decode(log.data);
+                textContent = textDecoder.decode(log.data);
             }
             logContentStrings.set(index, textContent);
 
@@ -121,8 +110,6 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
             }
         });
 
-        // If no matches, return empty or handle differently? 
-        // Typically if filter is active but no match, show nothing.
         if (matchIndices.size === 0) return [];
 
         // 2. Expand Context
@@ -145,9 +132,8 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
 
         sortedIndices.forEach(idx => {
             if (prevIdx !== -1 && idx > prevIdx + 1) {
-                // Insert Separator
                 result.push({
-                    id: -Math.random(), // Temporary ID
+                    id: -Math.random(),
                     timestamp: 0,
                     type: 'SEP',
                     data: ''
@@ -159,13 +145,12 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
             const isDirectMatch = matchIndices.has(idx);
             let modifiedLog = log;
 
-            // Apply Replace ONLY to direct matches
             if (isDirectMatch && showReplace && debouncedReplaceText) {
                 try {
                     const textContent = logContentStrings.get(idx) || "";
                     const newContent = textContent.replace(regex!, debouncedReplaceText);
                     modifiedLog = { ...log, data: newContent };
-                } catch (e) {
+                } catch {
                     // ignore replace error
                 }
             }
@@ -176,6 +161,90 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
         return result;
     }, [logs, debouncedFilterText, debouncedReplaceText, showReplace, debouncedContextLines]);
 
+    // Auto-scroll to bottom when new logs come in
+    useEffect(() => {
+        if (autoScroll && listRef.current && filteredLogs.length > 0) {
+            isProgrammaticScrollRef.current = true;
+            listRef.current.scrollToRow({
+                index: filteredLogs.length - 1,
+                align: 'end',
+                behavior: 'auto'
+            });
+            // Reset flag after a short delay
+            requestAnimationFrame(() => {
+                isProgrammaticScrollRef.current = false;
+            });
+        }
+    }, [filteredLogs.length, autoScroll]);
+
+    // Handle visible rows change to detect user scrolling away from bottom
+    const handleRowsRendered = useCallback((
+        visibleRows: { startIndex: number; stopIndex: number },
+        _allRows: { startIndex: number; stopIndex: number }
+    ) => {
+        // Skip if this is a programmatic scroll
+        if (isProgrammaticScrollRef.current) return;
+
+        // Skip if no logs
+        if (filteredLogs.length === 0) return;
+
+        // Throttle the state update to prevent excessive renders
+        if (scrollThrottleRef.current) return;
+
+        scrollThrottleRef.current = setTimeout(() => {
+            scrollThrottleRef.current = null;
+
+            // Check if user is viewing the last few rows (near bottom)
+            const lastVisibleIndex = visibleRows.stopIndex;
+            const lastLogIndex = filteredLogs.length - 1;
+            const isNearBottom = lastLogIndex - lastVisibleIndex <= 2; // Within 2 rows of bottom
+
+            // Only update state if it changed
+            setAutoScroll(prev => {
+                if (prev && !isNearBottom) return false;
+                if (!prev && isNearBottom) return true;
+                return prev;
+            });
+        }, 50); // Shorter throttle for more responsive detection
+    }, [filteredLogs.length]);
+
+    const handleSaveLog = async () => {
+        try {
+            const path = await save({
+                filters: [{
+                    name: 'Log Files',
+                    extensions: ['txt', 'log', 'json']
+                }]
+            });
+
+            if (!path) return;
+
+            let content = '';
+            const logsToExport = filteredLogs || logs;
+            logsToExport.forEach(log => {
+                if (log.type === 'SEP') return;
+
+                const date = new Date(log.timestamp).toISOString();
+                let dataStr = '';
+                if (typeof log.data === 'string') {
+                    dataStr = log.data;
+                } else {
+                    dataStr = Array.from(log.data).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                }
+                content += `[${date}] [${log.type}] ${dataStr}\n`;
+            });
+
+            await writeTextFile(path, content);
+        } catch (err) {
+            console.error('Failed to save log:', err);
+        }
+    };
+
+    // Memoize row props to prevent unnecessary re-renders
+    const rowProps = useMemo<LogRowProps>(() => ({
+        logs: filteredLogs,
+        viewMode
+    }), [filteredLogs, viewMode]);
 
     return (
         <div className="flex flex-col h-full w-full">
@@ -290,22 +359,28 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                 </div>
             </div>
 
-            {/* Simple Native List for Verification */}
-            <div
-                className="flex-1 min-h-0 bg-white border-t border-border overflow-y-auto font-mono text-xs"
-                onScroll={handleScroll}
-                ref={scrollRef}
-            >
-                {filteredLogs.map((log, index) => (
-                    <LogEntry
-                        key={log.id}
-                        index={index}
-                        entry={log}
-                        style={{ height: 24, width: '100%' }}
-                        mode={viewMode}
-                    />
-                ))}
-                <div ref={endRef} />
+            {/* Virtualized List */}
+            <div className="flex-1 min-h-0 bg-white border-t border-border">
+                <AutoSizer
+                    renderProp={({ height, width }) => {
+                        if (height === undefined || width === undefined) {
+                            return null;
+                        }
+                        return (
+                            <List
+                                listRef={listRef}
+                                rowComponent={LogRow}
+                                rowProps={rowProps}
+                                rowCount={filteredLogs.length}
+                                rowHeight={ROW_HEIGHT}
+                                className="font-mono text-xs"
+                                overscanCount={10}
+                                style={{ height, width }}
+                                onRowsRendered={handleRowsRendered}
+                            />
+                        );
+                    }}
+                />
             </div>
         </div>
     );
