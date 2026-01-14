@@ -4,6 +4,7 @@ import { cn } from "../lib/utils";
 import { RefreshCw, Link, Link2Off, Send, ChevronDown } from "lucide-react";
 import { HexSwitch } from "./ui/HexSwitch";
 import { PortSelect } from "./ui/PortSelect";
+import { PortSharingToggle } from "./PortSharingToggle";
 
 interface ControlPanelProps {
     config: SerialConfig;
@@ -218,10 +219,18 @@ export function ControlPanel({
                     )}
                 </div>
 
-                {/* Connect Button */}
+                {/* Port Sharing Toggle */}
+                <div className="ml-auto">
+                    <PortSharingToggle
+                        physicalPort={config.port_name}
+                        isConnected={connected}
+                    />
+                </div>
+
+                {/* Scripting Button */}
                 <button
                     onClick={onOpenScripting}
-                    className="ml-auto h-7 px-2 rounded flex items-center gap-1 font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white shadow-sm mr-1"
+                    className="h-7 px-2 rounded flex items-center gap-1 font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
                     title="Scripting"
                 >
                     <span className="text-xs">Script</span>

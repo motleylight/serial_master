@@ -208,3 +208,50 @@ pub async fn set_script(state: State<'_, crate::scripting::ScriptManager>, scrip
     }
     Ok(())
 }
+
+// ============== 端口共享功能 ==============
+
+use serial_master::core::com0com_manager::Com0comManager;
+use serial_master::core::port_sharing_manager::{PortSharingManager, SharingStatus};
+
+/// 检测 com0com 是否已安装
+#[tauri::command]
+pub async fn check_com0com_installed() -> bool {
+    Com0comManager::is_installed()
+}
+
+/// 获取虚拟端口对列表
+#[tauri::command]
+pub async fn get_virtual_pairs() -> Result<Vec<serial_master::core::com0com_manager::PortPair>, String> {
+    let manager = Com0comManager::new().map_err(to_string_err)?;
+    manager.list_pairs().map_err(to_string_err)
+}
+
+/// 获取端口共享状态
+#[tauri::command]
+pub async fn get_sharing_status(
+    state: State<'_, Mutex<PortSharingManager>>
+) -> Result<SharingStatus, String> {
+    let manager = state.lock().await;
+    Ok(manager.get_status())
+}
+
+/// 启用端口共享模式
+#[tauri::command]
+pub async fn enable_port_sharing(
+    state: State<'_, Mutex<PortSharingManager>>,
+    physical_port: String
+) -> Result<String, String> {
+    let mut manager = state.lock().await;
+    manager.enable_sharing(&physical_port).map_err(to_string_err)
+}
+
+/// 禁用端口共享模式
+#[tauri::command]
+pub async fn disable_port_sharing(
+    state: State<'_, Mutex<PortSharingManager>>
+) -> Result<(), String> {
+    let mut manager = state.lock().await;
+    manager.disable_sharing().map_err(to_string_err)
+}
+

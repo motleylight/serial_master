@@ -2,6 +2,7 @@ mod commands;
 pub mod scripting;
 
 use serial_master::core::serial_manager::SerialManager;
+use serial_master::core::port_sharing_manager::PortSharingManager;
 use scripting::ScriptManager;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
@@ -13,6 +14,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(Mutex::new(SerialManager::new()))
+        .manage(Mutex::new(PortSharingManager::new()))
         .manage(ScriptManager::new())
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -63,7 +65,13 @@ pub fn run() {
             commands::connect,
             commands::disconnect,
             commands::send,
-            commands::set_script
+            commands::set_script,
+            // 端口共享命令
+            commands::check_com0com_installed,
+            commands::get_virtual_pairs,
+            commands::get_sharing_status,
+            commands::enable_port_sharing,
+            commands::disable_port_sharing
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

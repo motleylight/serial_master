@@ -37,7 +37,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     manager.set_sender(tx);
 
     println!("2. Opening COM8 at 115200 baud...");
-    match manager.open("COM8", 115200) {
+    match manager.open(
+        "COM8", 
+        115200,
+        serialport::DataBits::Eight,
+        serialport::FlowControl::None,
+        serialport::Parity::None,
+        serialport::StopBits::One
+    ) {
         Ok(_) => println!("   Successfully opened COM8"),
         Err(e) => {
             println!("   Failed to open COM8: {}", e);

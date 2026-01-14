@@ -77,3 +77,72 @@ export class SerialService {
         });
     }
 }
+
+// ============== 端口共享服务 ==============
+
+export interface PortPair {
+    pair_id: number;
+    port_a: string;
+    port_b: string;
+}
+
+export interface SharingStatus {
+    enabled: boolean;
+    port_pair: PortPair | null;
+    external_port: string | null;
+}
+
+export class PortSharingService {
+    /**
+     * 检测 com0com 是否已安装
+     */
+    static async isCom0comInstalled(): Promise<boolean> {
+        if (!isTauri()) {
+            return false; // Mock: 未安装
+        }
+        return invoke('check_com0com_installed');
+    }
+
+    /**
+     * 获取虚拟端口对列表
+     */
+    static async getVirtualPairs(): Promise<PortPair[]> {
+        if (!isTauri()) {
+            return []; // Mock: 空列表
+        }
+        return invoke('get_virtual_pairs');
+    }
+
+    /**
+     * 获取当前共享状态
+     */
+    static async getSharingStatus(): Promise<SharingStatus> {
+        if (!isTauri()) {
+            return { enabled: false, port_pair: null, external_port: null };
+        }
+        return invoke('get_sharing_status');
+    }
+
+    /**
+     * 启用端口共享模式
+     * @param physicalPort 当前连接的物理端口名
+     * @returns 供其他软件使用的虚拟端口名
+     */
+    static async enableSharing(physicalPort: string): Promise<string> {
+        if (!isTauri()) {
+            return "COM99"; // Mock 返回
+        }
+        return invoke('enable_port_sharing', { physicalPort });
+    }
+
+    /**
+     * 禁用端口共享模式
+     */
+    static async disableSharing(): Promise<void> {
+        if (!isTauri()) {
+            return;
+        }
+        return invoke('disable_port_sharing');
+    }
+}
+
