@@ -2,6 +2,8 @@
 
 SerialMaster is a next-generation, cross-platform serial debugging tool built on a modern technology stack (Rust + Tauri + React). It is not just a simple serial terminal, but a powerful serial development platform integrated with multiple innovative features.
 
+![SerialMaster UI](UI_screenshot.png)
+
 ## Core Features
 
 ### 1. Ultimate Performance & Modern Experience

@@ -2,6 +2,8 @@
 
 SerialMaster 是一款基于现代技术栈（Rust + Tauri + React）构建的下一代跨平台串口调试工具。它不仅仅是一个简单的串口终端，更是一个集成了多个创新特性的强大串口开发平台。
 
+![SerialMaster UI](UI_screenshot.png)
+
 ## 核心特性
 
 ### 1. 极致性能与现代体验
