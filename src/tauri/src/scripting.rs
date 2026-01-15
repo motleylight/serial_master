@@ -38,12 +38,20 @@ impl ScriptManager {
 
         println!("[Script] Spawning process: {} {:?}", program, args);
 
-        let mut child = Command::new(program)
-            .args(&args)
+        let mut command = Command::new(program);
+        command.args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+            .stderr(Stdio::piped());
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let mut child = command.spawn()
             .map_err(|e| format!("Failed to spawn process '{}': {}", program, e))?;
 
         // Write to stdin
