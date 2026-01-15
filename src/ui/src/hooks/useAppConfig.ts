@@ -25,10 +25,24 @@ export interface SendConfig {
     appendMode: 'None' | 'CR' | 'LF' | 'CRLF';
 }
 
+export interface UiConfig {
+    sidebarVisible: boolean;
+    sidebarWidth: number;
+    showTimestamp: boolean;
+    inputDraft: string;
+    inputHistory: string[];
+}
+
+export interface PathsConfig {
+    commandsFile: string;
+}
+
 export interface AppConfig {
     serial: SerialConfig;
     terminal: TerminalConfig;
     send: SendConfig;
+    ui: UiConfig;
+    paths: PathsConfig;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -48,6 +62,16 @@ const DEFAULT_CONFIG: AppConfig = {
     send: {
         hexMode: false,
         appendMode: 'None'
+    },
+    ui: {
+        sidebarVisible: true,
+        sidebarWidth: 288,
+        showTimestamp: true,
+        inputDraft: '',
+        inputHistory: []
+    },
+    paths: {
+        commandsFile: 'commands.yaml' // Default relative path
     }
 };
 
@@ -59,13 +83,14 @@ export function useAppConfig() {
     useEffect(() => {
         const loadConfig = async () => {
             try {
-                // Ensure AppConfig dir exists
-                if (!await exists('', { baseDir: BaseDirectory.AppConfig })) {
-                    await mkdir('', { baseDir: BaseDirectory.AppConfig, recursive: true });
+                // Not strictly needed for Resource, but good practice if supported
+                if (!await exists('', { baseDir: BaseDirectory.Resource })) {
+                    // Creating root resource dir usually fails/is readonly, but let's try just in case user is in dev
+                    // Actually, if we are in dev target/debug/, it might work.
                 }
 
-                if (await exists(CONFIG_FILE, { baseDir: BaseDirectory.AppConfig })) {
-                    const content = await readTextFile(CONFIG_FILE, { baseDir: BaseDirectory.AppConfig });
+                if (await exists(CONFIG_FILE, { baseDir: BaseDirectory.Resource })) {
+                    const content = await readTextFile(CONFIG_FILE, { baseDir: BaseDirectory.Resource });
                     const parsed = yaml.load(content) as any; // Use any to safely merge
 
                     if (parsed) {
@@ -74,7 +99,9 @@ export function useAppConfig() {
                             ...parsed,
                             serial: { ...prev.serial, ...parsed.serial },
                             terminal: { ...prev.terminal, ...parsed.terminal },
-                            send: { ...prev.send, ...parsed.send }
+                            send: { ...prev.send, ...parsed.send },
+                            ui: { ...prev.ui, ...parsed.ui },
+                            paths: { ...prev.paths, ...parsed.paths }
                         }));
                     }
                 }
@@ -90,15 +117,24 @@ export function useAppConfig() {
     // Auto-save
     const debouncedConfig = useDebounce(config, 1000);
 
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+    const [saveError, setSaveError] = useState<string | null>(null);
+
     useEffect(() => {
         if (!loaded) return;
 
         const saveConfig = async () => {
+            setSaveStatus('saving');
+            setSaveError(null);
             try {
                 const yamlString = yaml.dump(debouncedConfig);
-                await writeTextFile(CONFIG_FILE, yamlString, { baseDir: BaseDirectory.AppConfig });
-            } catch (err) {
+                await writeTextFile(CONFIG_FILE, yamlString, { baseDir: BaseDirectory.Resource });
+                setSaveStatus('success');
+                setTimeout(() => setSaveStatus('idle'), 2000); // Reset after 2s
+            } catch (err: any) {
                 console.error('Failed to save config:', err);
+                setSaveStatus('error');
+                setSaveError(err?.toString() || 'Unknown error');
             }
         };
         saveConfig();
@@ -125,11 +161,30 @@ export function useAppConfig() {
         }));
     }, []);
 
+    const updateUiConfig = useCallback((updates: Partial<UiConfig>) => {
+        setConfig(prev => ({
+            ...prev,
+            ui: { ...prev.ui, ...updates }
+        }));
+    }, []);
+
+    const updatePathsConfig = useCallback((updates: Partial<PathsConfig>) => {
+        setConfig(prev => ({
+            ...prev,
+            paths: { ...prev.paths, ...updates }
+        }));
+    }, []);
+
+
     return {
         config,
         updateSerialConfig,
         updateTerminalConfig,
         updateSendConfig,
-        loaded
+        updateUiConfig,
+        updatePathsConfig,
+        loaded,
+        saveStatus,
+        saveError
     };
 }

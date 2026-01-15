@@ -24,30 +24,56 @@ interface StoredCommand {
 interface CommandManagerProps {
     onSend: (data: Uint8Array | number[]) => void;
     connected: boolean;
+    filePath: string;
+    onFilePathChange: (path: string) => void;
 }
 
-const COMMANDS_FILE = 'commands.yaml';
-
-export function CommandManager({ onSend, connected }: CommandManagerProps) {
+export function CommandManager({ onSend, connected, filePath, onFilePathChange }: CommandManagerProps) {
     const [commands, setCommands] = useState<SavedCommand[]>([]);
     const [loaded, setLoaded] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    // Track if we have unsaved changes to avoid overwriting on load?
+    // Actually, we want auto-save.
+    // Issue: If we switch file, we load new commands. 
+    // If we modify, we save to current `filePath`.
 
-    // Initial load
+    // Initial load & Load on filePath change
     useEffect(() => {
         const loadCommands = async () => {
+            if (!filePath) return;
+            setLoaded(false);
             try {
-                // Ensure AppConfig directory exists
-                const configExists = await exists('', { baseDir: BaseDirectory.AppConfig });
-                if (!configExists) {
-                    await mkdir('', { baseDir: BaseDirectory.AppConfig, recursive: true });
+                // Determine if path is relative or absolute. 
+                // Simple heuristic: if it looks like just a filename, use AppConfig.
+                // But `filePath` from config should eventually be absolute.
+                // However, default is 'commands.yaml'.
+
+                let content = '';
+                // Try reading as absolute first
+                try {
+                    content = await readTextFile(filePath);
+                } catch (e) {
+                    // If fail, and it's simple filename, try AppConfig
+                    // Or if it IS 'commands.yaml', use AppConfig BaseDir
+                    if (filePath === 'commands.yaml' || !filePath.includes('/') && !filePath.includes('\\')) {
+                        if (await exists(filePath, { baseDir: BaseDirectory.AppConfig })) {
+                            content = await readTextFile(filePath, { baseDir: BaseDirectory.AppConfig });
+                        } else {
+                            // File doesn't exist? Empty list
+                            setCommands([]);
+                            setLoaded(true);
+                            return;
+                        }
+                    } else {
+                        // Absolute path failed?
+                        console.error('Failed to read commands file:', e);
+                        setCommands([]); // Should we clear or keep previous? Clear is safer to avoid saving to wrong file.
+                        setLoaded(true);
+                        return;
+                    }
                 }
 
-                const fileExists = await exists(COMMANDS_FILE, { baseDir: BaseDirectory.AppConfig });
-                if (fileExists) {
-                    const content = await readTextFile(COMMANDS_FILE, { baseDir: BaseDirectory.AppConfig });
+                if (content) {
                     const parsed = yaml.load(content) as StoredCommand[];
-
                     if (Array.isArray(parsed)) {
                         const runtimeCommands = parsed.map(c => ({
                             id: Date.now().toString() + Math.random(),
@@ -56,36 +82,47 @@ export function CommandManager({ onSend, connected }: CommandManagerProps) {
                             isHex: !!c.isHex
                         }));
                         setCommands(runtimeCommands);
+                    } else {
+                        setCommands([]);
                     }
                 }
             } catch (err) {
                 console.error('Failed to load commands:', err);
+                setCommands([]);
             } finally {
                 setLoaded(true);
             }
         };
         loadCommands();
-    }, []);
+    }, [filePath]);
 
     // Debounced Auto-save
     const debouncedCommands = useDebounce(commands, 1000);
 
     useEffect(() => {
-        if (!loaded) return;
+        if (!loaded || !filePath) return;
 
         const saveCommands = async () => {
             try {
-                // Convert back to stored format (remove IDs)
                 const toSave: StoredCommand[] = debouncedCommands.map(({ id, ...rest }) => rest);
                 const yamlString = yaml.dump(toSave);
 
-                await writeTextFile(COMMANDS_FILE, yamlString, { baseDir: BaseDirectory.AppConfig });
+                // Same logic for write: absolute vs AppConfig
+                if (filePath === 'commands.yaml' || !filePath.includes('/') && !filePath.includes('\\')) {
+                    // Ensure dir exists
+                    if (!await exists('', { baseDir: BaseDirectory.AppConfig })) {
+                        await mkdir('', { baseDir: BaseDirectory.AppConfig, recursive: true });
+                    }
+                    await writeTextFile(filePath, yamlString, { baseDir: BaseDirectory.AppConfig });
+                } else {
+                    await writeTextFile(filePath, yamlString);
+                }
             } catch (err) {
                 console.error('Failed to auto-save commands:', err);
             }
         };
         saveCommands();
-    }, [debouncedCommands, loaded]);
+    }, [debouncedCommands, loaded, filePath]);
 
     const handleAdd = () => {
         const newCmd: SavedCommand = {
@@ -105,62 +142,46 @@ export function CommandManager({ onSend, connected }: CommandManagerProps) {
         setCommands(commands.filter(c => c.id !== id));
     };
 
-    const handleExport = async () => {
+    const handleSaveAs = async () => {
         try {
             const path = await save({
                 filters: [{
                     name: 'YAML Files',
                     extensions: ['yaml', 'yml']
                 }],
-                defaultPath: 'serial_commands.yaml'
+                defaultPath: filePath || 'commands.yaml'
             });
 
             if (!path) return;
 
+            // Save current commands to new path
             const toSave: StoredCommand[] = commands.map(({ id, ...rest }) => rest);
             const content = yaml.dump(toSave);
             await writeTextFile(path, content);
+
+            // Switch to new path
+            onFilePathChange(path);
         } catch (err) {
-            console.error('Failed to export commands:', err);
+            console.error('Failed to save commands as:', err);
         }
     };
 
-    const handleImportClick = async () => {
+    const handleOpen = async () => {
         try {
             const selected = await open({
                 multiple: false,
                 filters: [{
-                    name: 'YAML/JSON Files',
-                    extensions: ['yaml', 'yml', 'json']
+                    name: 'YAML Files',
+                    extensions: ['yaml', 'yml']
                 }]
             });
 
             if (selected && typeof selected === 'string') {
-                const content = await readTextFile(selected);
-                let imported: any;
-
-                if (selected.endsWith('.json')) {
-                    imported = JSON.parse(content);
-                } else {
-                    imported = yaml.load(content);
-                }
-
-                if (Array.isArray(imported)) {
-                    const validated = imported.map((c: any) => ({
-                        id: c.id || Date.now().toString() + Math.random(),
-                        name: c.name || 'Imported',
-                        command: c.command || '',
-                        isHex: !!c.isHex,
-                    }));
-
-                    // Option to merge or replace? Let's append for safety or replace? 
-                    // Usually import implies loading a set. Let's append to avoid losing current work unless user clears.
-                    // Or typically "Load" might replace. Let's Append.
-                    setCommands(prev => [...prev, ...validated]);
-                }
+                // Switch file path - config will update, triggering usage effect
+                onFilePathChange(selected);
             }
         } catch (err) {
-            console.error('Failed to import commands:', err);
+            console.error('Failed to open commands file:', err);
         }
     };
 
@@ -193,25 +214,23 @@ export function CommandManager({ onSend, connected }: CommandManagerProps) {
         <div className="flex flex-col h-full border border-border/40 rounded-md bg-white shadow-sm overflow-hidden">
             {/* Header / Global Controls */}
             <div className="flex items-center justify-between p-2 bg-muted/50 border-b border-border">
-                <span className="text-xs font-semibold text-muted-foreground">Commands</span>
-                <div className="flex gap-1">
+                <div className="flex flex-col min-w-0 flex-1 mr-2">
+                    <span className="text-xs font-semibold text-muted-foreground">Commands</span>
+                    <span className="text-[10px] text-muted-foreground/60 truncate" title={filePath}>
+                        {filePath === 'commands.yaml' ? 'Default' : filePath.split(/[/\\]/).pop()}
+                    </span>
+                </div>
+                <div className="flex gap-1 shrink-0">
                     <button onClick={handleAdd} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Add Command">
                         <Plus className="w-3.5 h-3.5" />
                     </button>
                     <div className="w-[1px] h-4 bg-border mx-1 self-center" />
-                    <button onClick={handleImportClick} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Import Commands (YAML/JSON)">
+                    <button onClick={handleOpen} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Open Command File...">
                         <FolderOpen className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={handleExport} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Export Commands (YAML)">
+                    <button onClick={handleSaveAs} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Save As / Export...">
                         <Save className="w-3.5 h-3.5" />
                     </button>
-
-                    {/* Input ref no longer needed with plugin-dialog but kept if we revert */}
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                    />
                 </div>
             </div>
 

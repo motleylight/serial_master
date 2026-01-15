@@ -10,8 +10,56 @@
     "log:default",
     "dialog:default",
     "fs:default",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        {
+          "path": "$APPCONFIG/*"
+        },
+        {
+          "path": "$RESOURCE/*"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        {
+          "path": "$APPCONFIG/*"
+        },
+        {
+          "path": "$RESOURCE/*"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [
+        {
+          "path": "$APPCONFIG/*"
+        },
+        {
+          "path": "$RESOURCE/*"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [
+        {
+          "path": "$APPCONFIG"
+        },
+        {
+          "path": "$APPCONFIG/*"
+        },
+        {
+          "path": "$RESOURCE"
+        },
+        {
+          "path": "$RESOURCE/*"
+        }
+      ]
+    },
     "fs:allow-create",
     "fs:allow-write"
   ]

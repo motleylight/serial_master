@@ -43,13 +43,12 @@ const MAX_LOG_COUNT = 10000;
 const BATCH_UPDATE_INTERVAL = 100; // ms
 
 function App() {
-  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig } = useAppConfig();
+  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig, updateUiConfig, updatePathsConfig } = useAppConfig();
   const serialConfig = config.serial;
+  const uiConfig = config.ui;
 
   const [logs, setLogs] = useState<LogData[]>([]);
   const [connected, setConnected] = useState(false);
-  const [showSidePanel, setShowSidePanel] = useState(true);
-  const [sidePanelWidth, setSidePanelWidth] = useState(288);
   const [showScriptEditor, setShowScriptEditor] = useState(false);
 
   // Buffer for batch updates - reduces render frequency significantly
@@ -90,7 +89,7 @@ function App() {
       logBufferRef.current.push(newEntry);
     });
 
-    const handleToggleSidebar = () => setShowSidePanel(prev => !prev);
+    const handleToggleSidebar = () => updateUiConfig({ sidebarVisible: !uiConfig.sidebarVisible });
     window.addEventListener('toggle-sidebar', handleToggleSidebar);
 
     return () => {
@@ -103,7 +102,7 @@ function App() {
       unlisten.then(f => f());
       window.removeEventListener('toggle-sidebar', handleToggleSidebar);
     };
-  }, [flushLogBuffer]);
+  }, [flushLogBuffer, uiConfig.sidebarVisible, updateUiConfig]);
 
   const handleConnect = async (configOverride?: SerialConfig) => {
     const configToUse = configOverride || serialConfig;
@@ -214,6 +213,8 @@ function App() {
                   onOpenScripting={() => setShowScriptEditor(true)}
                   sendConfig={config.send}
                   onSendConfigChange={updateSendConfig}
+                  ui={uiConfig}
+                  onUiUpdate={updateUiConfig}
                 />
               </div>
 
@@ -226,15 +227,15 @@ function App() {
             <div
               className={cn(
                 "w-1 bg-border/50 hover:bg-primary/50 cursor-col-resize z-20 flex items-center justify-center transition-colors touch-none",
-                !showSidePanel && "hidden"
+                !uiConfig.sidebarVisible && "hidden"
               )}
               onMouseDown={(e) => {
                 const startX = e.clientX;
-                const startWidth = sidePanelWidth;
+                const startWidth = uiConfig.sidebarWidth;
 
                 const handleMouseMove = (moveEvent: MouseEvent) => {
                   const newWidth = Math.max(200, Math.min(600, startWidth + (startX - moveEvent.clientX)));
-                  setSidePanelWidth(newWidth);
+                  updateUiConfig({ sidebarWidth: newWidth });
                 };
 
                 const handleMouseUp = () => {
@@ -253,22 +254,28 @@ function App() {
 
             {/* Side Panel (Command Manager) */}
             <div
-              style={{ width: showSidePanel ? sidePanelWidth : 0 }}
+              style={{ width: uiConfig.sidebarVisible ? uiConfig.sidebarWidth : 0 }}
               className={cn(
                 "border-l border-border bg-background flex flex-col transition-[width] duration-0 ease-linear", // Disable transition during drag
-                !showSidePanel && "overflow-hidden border-l-0"
+                !uiConfig.sidebarVisible && "overflow-hidden border-l-0"
               )}
             >
               <div className="h-full p-2 relative">
                 {/* Close Button Inside Panel */}
                 {/* Close Button Inside Panel - Removed as it overlaps and is redundant with the Toolbar Toggle */}
 
-                <CommandManager onSend={handleSend} connected={connected} />
+                <CommandManager
+                  onSend={handleSend}
+                  connected={connected}
+                  filePath={config.paths.commandsFile}
+                  onFilePathChange={(path) => updatePathsConfig({ commandsFile: path })}
+                />
               </div>
             </div>
 
             {/* Toggle Side Panel Button - Replaced by event listener in Terminal Toolbar */}
             {/* Logic handled via window event dispatch from TerminalContainer */}
+
 
             {/* Mock Mode Indicator */}
             {window.location.protocol.startsWith('http') && !('__TAURI_INTERNALS__' in window) && (

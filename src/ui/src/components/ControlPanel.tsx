@@ -5,7 +5,7 @@ import { RefreshCw, Link, Link2Off, Send, ChevronDown } from "lucide-react";
 import { HexSwitch } from "./ui/HexSwitch";
 import { PortSelect } from "./ui/PortSelect";
 import { PortSharingToggle } from "./PortSharingToggle";
-import { SendConfig } from "../hooks/useAppConfig";
+import { SendConfig, UiConfig } from "../hooks/useAppConfig";
 
 interface ControlPanelProps {
     config: SerialConfig;
@@ -17,6 +17,8 @@ interface ControlPanelProps {
     onOpenScripting: () => void;
     sendConfig: SendConfig;
     onSendConfigChange: (config: Partial<SendConfig>) => void;
+    ui: UiConfig;
+    onUiUpdate: (updates: Partial<UiConfig>) => void;
 }
 
 export function ControlPanel({
@@ -29,6 +31,8 @@ export function ControlPanel({
     onOpenScripting,
     sendConfig,
     onSendConfigChange,
+    ui,
+    onUiUpdate,
 }: ControlPanelProps) {
     // --- Settings Logic ---
     const [ports, setPorts] = useState<SerialPortInfo[]>([]);
@@ -61,29 +65,48 @@ export function ControlPanel({
     };
 
     // --- Input Logic ---
-    const [input, setInput] = useState('');
-    // Removed local isHex/appendMode state in favor of props
-    // const [isHex, setIsHex] = useState(false);
-    // const [appendMode, setAppendMode] = useState<'None' | 'CR' | 'LF' | 'CRLF'>('None');
+    // Use local state for immediate feedback, sync to config on debounce/blur
+    const [input, setInput] = useState(ui.inputDraft);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+
+    // Sync input from props if it changes externally (e.g. reload)
+    useEffect(() => {
+        if (input !== ui.inputDraft) {
+            // Only update if significantly different to avoid cursor jumping if we were to sync constantly
+            // Actually, for a draft, we probably just want to initialize it.
+            // But if we want it to be truly persistent across reloads, initializing useState is enough.
+            // If we want two windows to sync, we'd need more complex logic.
+            // For now, let's just trust initial state.
+        }
+    }, []);
+
+    // Debounce update draft
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (input !== ui.inputDraft) {
+                onUiUpdate({ inputDraft: input });
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [input, onUiUpdate, ui.inputDraft]);
+
 
     // Derived values for convenience
     const isHex = sendConfig?.hexMode ?? false;
     const appendMode = sendConfig?.appendMode ?? 'None';
-
-    const [history, setHistory] = useState<string[]>([]);
-    const [historyIndex, setHistoryIndex] = useState(-1);
+    const history = ui.inputHistory;
 
     const handleSend = () => {
         if (!input) return;
 
-        setHistory(prev => {
-            if (prev.length === 0 || prev[prev.length - 1] !== input) {
-                const newHistory = [...prev, input];
-                if (newHistory.length > 50) return newHistory.slice(newHistory.length - 50);
-                return newHistory;
-            }
-            return prev;
-        });
+        // Update History
+        let newHistory = history;
+        if (history.length === 0 || history[history.length - 1] !== input) {
+            newHistory = [...history, input];
+            if (newHistory.length > 50) newHistory = newHistory.slice(newHistory.length - 50);
+            onUiUpdate({ inputHistory: newHistory });
+        }
+
         setHistoryIndex(-1);
 
         try {
