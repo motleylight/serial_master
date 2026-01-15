@@ -200,11 +200,11 @@ pub async fn send(state: State<'_, Mutex<SerialManager>>, script_manager: State<
 
 #[tauri::command]
 pub async fn set_script(state: State<'_, crate::scripting::ScriptManager>, script_type: String, content: String) -> Result<(), String> {
+    let cmd = if content.trim().is_empty() { None } else { Some(content) };
     match script_type.as_str() {
-        "pre_send" => state.set_pre_send_script(content),
-        "post_send" => state.set_post_send_script(content),
-        "rx" => state.set_rx_script(content),
-        _ => return Err(format!("Invalid script type: {}", script_type)),
+        "pre_send" => state.set_pre_send_cmd(cmd),
+        "rx" => state.set_rx_cmd(cmd),
+        _ => return Err(format!("Invalid script type or not supported: {}", script_type)),
     }
     Ok(())
 }

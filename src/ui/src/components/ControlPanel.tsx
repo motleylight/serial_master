@@ -1,11 +1,12 @@
 import { useState, useEffect, KeyboardEvent } from "react";
 import { SerialService, SerialConfig, SerialPortInfo } from "../services/ipc";
 import { cn } from "../lib/utils";
-import { RefreshCw, Link, Link2Off, Send, ChevronDown } from "lucide-react";
+import { RefreshCw, Link, Link2Off, Send, ChevronDown, X } from "lucide-react";
 import { HexSwitch } from "./ui/HexSwitch";
 import { PortSelect } from "./ui/PortSelect";
 import { PortSharingToggle } from "./PortSharingToggle";
 import { SendConfig, UiConfig } from "../hooks/useAppConfig";
+import { ScriptService } from "../services/ScriptService";
 
 interface ControlPanelProps {
     config: SerialConfig;
@@ -261,14 +262,73 @@ export function ControlPanel({
                     />
                 </div>
 
-                {/* Scripting Button */}
-                <button
-                    onClick={onOpenScripting}
-                    className="h-7 px-2 rounded flex items-center gap-1 font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                    title="Scripting"
-                >
-                    <span className="text-xs">Script</span>
-                </button>
+
+
+                {/* Scripting Button with Active Indicators */}
+                {/* Scripting Button with Active Indicators */}
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={onOpenScripting}
+                        className="h-7 px-2 rounded flex items-center gap-1 font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                        title="Scripting Configuration"
+                    >
+                        <span className="text-xs">Script</span>
+                    </button>
+
+                    {/* Visual Indicators for Active Hooks */}
+                    {(() => {
+                        const [txState, setTxState] = useState(ScriptService.txState);
+                        const [rxState, setRxState] = useState(ScriptService.rxState);
+
+                        useEffect(() => {
+                            const handler = () => {
+                                setTxState(ScriptService.txState);
+                                setRxState(ScriptService.rxState);
+                            };
+                            ScriptService.addEventListener('change', handler);
+                            return () => ScriptService.removeEventListener('change', handler);
+                        }, []);
+
+                        const hasTx = txState.type !== null && !!txState.content;
+                        const hasRx = rxState.type !== null && !!rxState.content;
+
+                        if (!hasTx && !hasRx) return null;
+
+                        return (
+                            <div className="flex items-center gap-1 ml-1">
+                                <div className="flex flex-col gap-0.5">
+                                    {hasTx && (
+                                        <span className={cn(
+                                            "text-[9px] font-bold px-1 rounded border leading-none py-[1px]",
+                                            txState.type === 'js'
+                                                ? "bg-blue-100 text-blue-700 border-blue-200"
+                                                : "bg-purple-100 text-purple-700 border-purple-200"
+                                        )} title={`TX Hook: ${txState.type === 'js' ? 'JavaScript' : 'External Command'}`}>
+                                            TX:{txState.type === 'js' ? 'JS' : 'EXT'}
+                                        </span>
+                                    )}
+                                    {hasRx && (
+                                        <span className={cn(
+                                            "text-[9px] font-bold px-1 rounded border leading-none py-[1px]",
+                                            rxState.type === 'js'
+                                                ? "bg-blue-100 text-blue-700 border-blue-200"
+                                                : "bg-purple-100 text-purple-700 border-purple-200"
+                                        )} title={`RX Hook: ${rxState.type === 'js' ? 'JavaScript' : 'External Command'}`}>
+                                            RX:{rxState.type === 'js' ? 'JS' : 'EXT'}
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => ScriptService.clearAll()}
+                                    className="h-full px-1 hover:bg-red-100 text-red-500 rounded transition-colors"
+                                    title="Stop All Scripts"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        );
+                    })()}
+                </div>
 
                 <button
                     onClick={connected ? onDisconnect : onConnect}

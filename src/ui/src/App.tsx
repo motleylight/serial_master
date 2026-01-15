@@ -8,6 +8,7 @@ import { ControlPanel } from './components/ControlPanel';
 import { CommandManager } from './components/CommandManager';
 import { cn } from './lib/utils';
 import { ScriptEditor } from './components/ScriptEditor';
+import { ScriptService } from './services/ScriptService';
 import { useAppConfig } from './hooks/useAppConfig';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -43,7 +44,7 @@ const MAX_LOG_COUNT = 10000;
 const BATCH_UPDATE_INTERVAL = 100; // ms
 
 function App() {
-  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig, updateUiConfig, updatePathsConfig } = useAppConfig();
+  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig, updateUiConfig, updatePathsConfig, updateScriptConfig } = useAppConfig();
   const serialConfig = config.serial;
   const uiConfig = config.ui;
 
@@ -56,6 +57,29 @@ function App() {
   const batchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Counter for unique IDs (more reliable than Date.now() + random)
   const logIdCounterRef = useRef(0);
+
+  // Sync Script Config <-> Script Service
+  // 1. Config -> Service (Initial Load & Updates)
+  useEffect(() => {
+    // Avoid loops: ScriptService.syncState checks if actually changed before doing work or firing events
+    ScriptService.syncState(config.scripts);
+  }, [config.scripts]);
+
+  // 2. Service -> Config (User Actions)
+  useEffect(() => {
+    const handleScriptChange = () => {
+      const tx = ScriptService.txState;
+      const rx = ScriptService.rxState;
+      // Verify if different from config to avoid loops
+      if (JSON.stringify(config.scripts.tx) !== JSON.stringify(tx) ||
+        JSON.stringify(config.scripts.rx) !== JSON.stringify(rx)) {
+        updateScriptConfig({ tx, rx });
+      }
+    };
+    ScriptService.addEventListener('change', handleScriptChange);
+    return () => ScriptService.removeEventListener('change', handleScriptChange);
+  }, [config.scripts, updateScriptConfig]);
+
 
   // Flush buffer to state
   const flushLogBuffer = useCallback(() => {
@@ -80,11 +104,15 @@ function App() {
 
     // Listen to data - now buffers instead of immediate setState
     const unlisten = SerialService.listen((data) => {
+      // Apply Rx JS Hook
+      const processed = ScriptService.runRxHook(data);
+      if (processed.length === 0) return; // Drop
+
       const newEntry: LogData = {
         id: ++logIdCounterRef.current,
         timestamp: Date.now(),
         type: 'RX',
-        data: data
+        data: processed
       };
       logBufferRef.current.push(newEntry);
     });
@@ -148,17 +176,17 @@ function App() {
 
   const handleSend = async (data: Uint8Array | number[]) => {
     try {
-      await SerialService.send(data);
-      // Log TX
-      // We know it's Uint8Array because we converted it before calling send in some cases,
-      // but let's ensure it for display
-      const dataArr = data instanceof Uint8Array ? data : new Uint8Array(data);
+      // Apply JS Tx Hook (if any)
+      // If external hook is active in backend, this will likely be pass-through (empty js script)
+      const processedData = ScriptService.runTxHook(data);
+
+      await SerialService.send(processedData);
 
       setLogs(prev => [...prev, {
         id: Date.now() + Math.random(),
         timestamp: Date.now(),
         type: 'TX',
-        data: dataArr
+        data: processedData
       }]);
     } catch (e: any) {
       console.error(e);

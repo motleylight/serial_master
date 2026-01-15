@@ -1,51 +1,71 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
-import { invoke } from '@tauri-apps/api/core';
+
 import { X, Save, FolderOpen, Play } from 'lucide-react';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { ScriptService } from '../services/ScriptService';
 
-const TEMPLATES = [
+const JS_TEMPLATES = [
     {
         name: 'Tx: Append Newline',
         type: 'pre_send',
-        code: `# Append newline (0x0A)
-data.append(0x0A)`
+        code: `// Append newline (0x0A)
+data.push(0x0A);`
     },
     {
         name: 'Tx: Add Header/Footer',
         type: 'pre_send',
-        code: `# Add Header [0xAA] and Footer [0xFF]
-data.insert(0, 0xAA)
-data.append(0xFF)`
+        code: `// Add Header [0xAA] and Footer [0xFF]
+data.unshift(0xAA);
+data.push(0xFF);`
     },
     {
-        name: 'Tx: Modbus CRC16',
+        name: 'Tx: Modbus CRC16 (Example)',
         type: 'pre_send',
-        code: `# Modbus CRC16
-crc = 0xFFFF
-for byte in data:
-    crc ^= byte
-    for _ in range(8):
-        if crc & 1:
-            crc = (crc >> 1) ^ 0xA001
-        else:
-            crc >>= 1
-data.append(crc & 0xFF)
-data.append((crc >> 8) & 0xFF)`
+        code: `// Simple CRC16 (Modbus)
+let crc = 0xFFFF;
+for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+        if (crc & 1) crc = (crc >> 1) ^ 0xA001;
+        else crc >>= 1;
+    }
+}
+data.push(crc & 0xFF);
+data.push((crc >> 8) & 0xFF);`
     },
     {
         name: 'Rx: Filter 0xFF',
         type: 'rx',
-        code: `# Drop packet if it contains 0xFF
-if 0xFF in data:
-    data = []`
+        code: `// Drop packet if it contains 0xFF
+if (data.includes(0xFF)) {
+    data.length = 0; // Clear array to drop
+}`
     },
     {
         name: 'Rx: Only Printable',
         type: 'rx',
-        code: `# Keep only printable ASCII (32-126) or newline
-data = [b for b in data if (32 <= b <= 126) or b == 10 or b == 13]`
+        code: `// Keep only printable ASCII (32-126) or newline
+const filtered = data.filter(b => (b >= 32 && b <= 126) || b === 10 || b === 13);
+// Replace content of data
+data.length = 0;
+data.push(...filtered);`
+    }
+];
+
+const EXT_TEMPLATES = [
+    {
+        name: 'Python Script',
+        code: 'python script.py'
+    },
+    {
+        name: 'Node Script',
+        code: 'node script.js'
+    },
+    {
+        name: 'Executable',
+        code: './path/to/executable.exe'
     }
 ];
 
@@ -55,43 +75,161 @@ interface ScriptEditorProps {
 }
 
 export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
-    const [activeTab, setActiveTab] = useState<'pre_send' | 'rx'>('pre_send');
-    const [preScript, setPreScript] = useState('');
-    const [rxScript, setRxScript] = useState('');
+    const [mode, setMode] = useState<'js' | 'external'>('external');
+    const [activeTab, setActiveTab] = useState<'pre_send' | 'rx'>('rx');
 
-    const handleApply = async () => {
+    // JS Scripts
+    const [jsPre, setJsPre] = useState('');
+    const [jsRx, setJsRx] = useState('');
+
+    // External Commands
+    const [extPre, setExtPre] = useState('');
+    const [extRx, setExtRx] = useState('');
+
+    // Draft Persistence
+    useEffect(() => {
+        const drafts = {
+            js: { pre: jsPre, rx: jsRx },
+            ext: { pre: extPre, rx: extRx }
+        };
+        localStorage.setItem('script_drafts', JSON.stringify(drafts));
+    }, [jsPre, jsRx, extPre, extRx]);
+
+    // Initial Load Logic
+    useEffect(() => {
+        if (isOpen) {
+            const tx = ScriptService.txState;
+            const rx = ScriptService.rxState;
+
+            // 1. Try to load ACTIVE scripts first
+            // Mode inference: If any script is active, switch to that mode
+            if (tx.type === 'js' || rx.type === 'js') {
+                setMode('js');
+                if (tx.type === 'js') setJsPre(tx.content);
+                if (rx.type === 'js') setJsRx(rx.content);
+            } else if (tx.type === 'external' || rx.type === 'external') {
+                setMode('external');
+                if (tx.type === 'external') setExtPre(tx.content);
+                if (rx.type === 'external') setExtRx(rx.content);
+            }
+
+            // 2. Load DRAFTS for non-active parts (or everything if nothing active)
+            try {
+                const saved = localStorage.getItem('script_drafts');
+                if (saved) {
+                    const drafts = JSON.parse(saved);
+                    // Only overwrite if NOT active (to avoid overwriting running code with old drafts, 
+                    // though usually running code IS the draft. Use caution.)
+                    // Actually, if active, we already set it above.
+                    // We just need to fill in the blanks.
+
+                    if (drafts.js) {
+                        if (tx.type !== 'js') setJsPre(drafts.js.pre || '');
+                        if (rx.type !== 'js') setJsRx(drafts.js.rx || '');
+                    }
+                    if (drafts.ext) {
+                        if (tx.type !== 'external') setExtPre(drafts.ext.pre || '');
+                        if (rx.type !== 'external') setExtRx(drafts.ext.rx || '');
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+    }, [isOpen]);
+
+
+    // Track running state for CURRENT ACTIVE TAB
+    const [isRunning, setIsRunning] = useState(false);
+    useEffect(() => {
+        const checkRunning = () => {
+            const tx = ScriptService.txState;
+            const rx = ScriptService.rxState;
+            // Now logic depends on activeTab
+            if (mode === 'js') {
+                if (activeTab === 'pre_send') setIsRunning(tx.type === 'js');
+                else setIsRunning(rx.type === 'js');
+            } else {
+                if (activeTab === 'pre_send') setIsRunning(tx.type === 'external');
+                else setIsRunning(rx.type === 'external');
+            }
+        };
+        checkRunning();
+        ScriptService.addEventListener('change', checkRunning);
+        return () => ScriptService.removeEventListener('change', checkRunning);
+    }, [mode, activeTab]);
+
+    const handleToggleRun = async () => {
         try {
-            await invoke('set_script', { scriptType: 'pre_send', content: preScript });
-            await invoke('set_script', { scriptType: 'rx', content: rxScript });
-            console.log('Scripts applied');
+            if (isRunning) {
+                // STOP only the active tab's script type
+                if (activeTab === 'pre_send') {
+                    // Start or Stop Tx
+                    // If running, we stop it (set to null)
+                    await ScriptService.setTxScript(null, '');
+                } else {
+                    // Stop Rx
+                    await ScriptService.setRxScript(null, '');
+                }
+            } else {
+                // START active tab
+                const content = mode === 'js'
+                    ? (activeTab === 'pre_send' ? jsPre : jsRx)
+                    : (activeTab === 'pre_send' ? extPre : extRx);
+
+                if (activeTab === 'pre_send') {
+                    // Start Tx
+                    await ScriptService.setTxScript(mode, content);
+                } else {
+                    // Start Rx
+                    await ScriptService.setRxScript(mode, content);
+                }
+                // Do NOT close window implicitly per user request
+            }
         } catch (e) {
-            console.error('Failed to apply scripts', e);
+            console.error(e);
         }
     };
 
     const handleOpenFile = async () => {
         try {
+            const ext = mode === 'js' ? ['js'] : [];
             const selected = await open({
                 multiple: false,
-                filters: [{ name: 'Python Script', extensions: ['py'] }]
+                filters: ext.length ? [{ name: 'Script', extensions: ext }] : undefined
             });
             if (selected && typeof selected === 'string') {
                 const content = await readTextFile(selected);
-                if (activeTab === 'pre_send') setPreScript(content);
-                else setRxScript(content);
+                if (mode === 'js') {
+                    if (activeTab === 'pre_send') setJsPre(content);
+                    else setJsRx(content);
+                } else {
+                    // Start thinking: External mode "Open File" might mean "Pick Executable Path"?
+                    // Or "Load command from file"?
+                    // Assuming picking executable path to put in command box.
+                    // Actually readTextFile implies loading CONTENT of file.
+                    // If mode is external, maybe we shouldn't "Open File" content, but "Pick Path".
+                    // But if user wants to load a saved "command string", they can use text file.
+                    // Let's assume loading text content for now.
+                    if (activeTab === 'pre_send') setExtPre(content);
+                    else setExtRx(content);
+                }
             }
         } catch (err) {
             console.error(err);
         }
     };
 
+
+
     const handleSaveFile = async () => {
         try {
+            const ext = mode === 'js' ? ['js'] : ['txt'];
             const filePath = await save({
-                filters: [{ name: 'Python Script', extensions: ['py'] }]
+                filters: [{ name: 'Script', extensions: ext }]
             });
             if (filePath) {
-                const content = activeTab === 'pre_send' ? preScript : rxScript;
+                const content = mode === 'js'
+                    ? (activeTab === 'pre_send' ? jsPre : jsRx)
+                    : (activeTab === 'pre_send' ? extPre : extRx);
                 await writeTextFile(filePath, content);
             }
         } catch (err) {
@@ -100,50 +238,88 @@ export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
     };
 
     const applyTemplate = (code: string) => {
-        if (activeTab === 'pre_send') setPreScript(code);
-        else setRxScript(code);
+        if (mode === 'js') {
+            if (activeTab === 'pre_send') setJsPre(code);
+            else setJsRx(code);
+        } else {
+            if (activeTab === 'pre_send') setExtPre(code);
+            else setExtRx(code);
+        }
     };
+
+    const currentCode = mode === 'js'
+        ? (activeTab === 'pre_send' ? jsPre : jsRx)
+        : (activeTab === 'pre_send' ? extPre : extRx);
+
+    const updateCode = (val: string) => {
+        if (mode === 'js') {
+            if (activeTab === 'pre_send') setJsPre(val);
+            else setJsRx(val);
+        } else {
+            if (activeTab === 'pre_send') setExtPre(val);
+            else setExtRx(val);
+        }
+    }
 
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className="bg-white w-[900px] h-[600px] flex flex-col rounded-lg shadow-2xl overflow-hidden border border-gray-200">
+                {/* Toolbar */}
                 <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-sm font-semibold text-gray-700 ml-2">Scripting Engine (Python)</h2>
-                        <div className="h-6 w-[1px] bg-gray-300"></div>
                         <div className="flex bg-gray-200 rounded-md p-0.5">
                             <button
-                                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${activeTab === 'pre_send' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
-                                onClick={() => setActiveTab('pre_send')}
+                                className={`px-3 py-1 text-xs font-bold rounded-sm transition-all ${mode === 'external' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                                onClick={() => setMode('external')}
                             >
-                                Tx Hook
+                                External Command
                             </button>
+                            <button
+                                className={`px-3 py-1 text-xs font-bold rounded-sm transition-all ${mode === 'js' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                                onClick={() => setMode('js')}
+                            >
+                                JavaScript
+                            </button>
+                        </div>
+
+                        <div className="h-6 w-[1px] bg-gray-300"></div>
+
+                        <div className="flex bg-gray-200 rounded-md p-0.5">
                             <button
                                 className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${activeTab === 'rx' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
                                 onClick={() => setActiveTab('rx')}
                             >
                                 Rx Hook
                             </button>
+                            <button
+                                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${activeTab === 'pre_send' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+                                onClick={() => setActiveTab('pre_send')}
+                            >
+                                Tx Hook
+                            </button>
                         </div>
-                        <div className="h-6 w-[1px] bg-gray-300 mx-2"></div>
+
+                        <div className="h-6 w-[1px] bg-gray-300 mx-1"></div>
+
                         <select
-                            className="text-xs border border-gray-300 rounded px-2 py-1 outline-none text-gray-700 bg-white hover:border-gray-400"
+                            className="text-xs border border-gray-300 rounded px-2 py-1 outline-none text-gray-700 bg-white hover:border-gray-400 max-w-[150px]"
                             onChange={(e) => {
                                 if (e.target.value) {
                                     applyTemplate(e.target.value);
-                                    e.target.value = ""; // Reset
+                                    e.target.value = "";
                                 }
                             }}
                             defaultValue=""
                         >
-                            <option value="" disabled>Load Template...</option>
-                            {TEMPLATES.filter(t => t.type === activeTab).map((t, i) => (
+                            <option value="" disabled>Templates...</option>
+                            {((mode === 'js' ? JS_TEMPLATES.filter(t => t.type === activeTab) : EXT_TEMPLATES) as any[]).map((t, i) => (
                                 <option key={i} value={t.code}>{t.name}</option>
                             ))}
                         </select>
                     </div>
+
                     <div className="flex gap-2">
                         <button onClick={handleOpenFile} className="p-1.5 hover:bg-gray-200 rounded text-gray-600 hover:text-gray-900 transition-colors" title="Open File">
                             <FolderOpen className="w-4 h-4" />
@@ -152,51 +328,63 @@ export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
                             <Save className="w-4 h-4" />
                         </button>
                         <div className="h-6 w-[1px] bg-gray-300 mx-1"></div>
-                        <button onClick={handleApply} className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors" title="Apply to Engine">
-                            <Play className="w-3.5 h-3.5 fill-current" /> Apply
+                        <button onClick={handleToggleRun} className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${isRunning ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-600 text-white hover:bg-blue-700'}`} title={isRunning ? "Stop Scripts" : "Apply Changes"}>
+                            {isRunning ? (
+                                <><X className="w-3.5 h-3.5" /> Stop</>
+                            ) : (
+                                <><Play className="w-3.5 h-3.5 fill-current" /> Apply</>
+                            )}
                         </button>
                         <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded text-gray-500 hover:text-gray-800 transition-colors">
                             <X className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
-                <div className="flex-1 relative">
-                    <Editor
-                        height="100%"
-                        defaultLanguage="python"
-                        value={activeTab === 'pre_send' ? preScript : rxScript}
-                        onChange={(val) => {
-                            if (!val) val = '';
-                            if (activeTab === 'pre_send') setPreScript(val);
-                            else setRxScript(val);
-                        }}
-                        options={{
-                            minimap: { enabled: false },
-                            scrollBeyondLastLine: false,
-                            fontSize: 13,
-                        }}
-                    />
-                </div>
-                <div className="p-3 text-xs text-gray-600 border-t bg-gray-50 flex flex-col gap-1">
-                    {activeTab === 'pre_send' && (
-                        <>
-                            <div className="font-semibold text-gray-800">Tx Hook (Pre-send) Context:</div>
-                            <ul className="list-disc pl-4 space-y-0.5">
-                                <li>Variable <code>data</code> (list of int) contains the bytes to be sent.</li>
-                                <li>Modify <code>data</code> in place or assign a new list to it to change what is sent.</li>
-                                <li>Example: <code>data.append(0x0A)</code> or <code>data = [0xFF] + data</code></li>
-                            </ul>
-                        </>
+
+                {/* Editor / Input Area */}
+                <div className="flex-1 relative bg-white">
+                    {mode === 'js' ? (
+                        <Editor
+                            height="100%"
+                            defaultLanguage="javascript"
+                            language="javascript"
+                            theme="light"
+                            value={currentCode}
+                            onChange={(val) => updateCode(val || '')}
+                            options={{
+                                minimap: { enabled: false },
+                                scrollBeyondLastLine: false,
+                                fontSize: 13,
+                                fontFamily: 'Menlo, Monaco, "Courier New", monospace'
+                            }}
+                        />
+                    ) : (
+                        <div className="p-6">
+                            <div className="text-gray-700 text-sm mb-2 font-semibold">Command Line to Execute:</div>
+                            <input
+                                className="w-full bg-white border border-gray-300 rounded p-3 text-gray-900 font-mono text-sm focus:border-blue-500 focus:outline-none placeholder-gray-400 shadow-sm"
+                                placeholder="e.g. python processor.py --arg"
+                                value={currentCode}
+                                onChange={e => updateCode(e.target.value)}
+                            />
+                            <div className="mt-4 text-xs text-gray-500 space-y-2">
+                                <p>Provide the full command line to run. The process will be spawned for each data packet if it terminates, or reused (implementation dependent).</p>
+                                <p><strong>Data Flow:</strong> Serial Data &rarr; Stdin &rarr; External Process &rarr; Stdout &rarr; (Serial/UI)</p>
+                            </div>
+                        </div>
                     )}
-                    {activeTab === 'rx' && (
-                        <>
-                            <div className="font-semibold text-gray-800">Rx Hook (Pre-display) Context:</div>
-                            <ul className="list-disc pl-4 space-y-0.5">
-                                <li>Variable <code>data</code> (list of int) contains bytes received from port.</li>
-                                <li>Modify <code>data</code> to filter or transform what the UI sees.</li>
-                                <li>Set <code>data = []</code> to filter out (drop) the packet.</li>
-                            </ul>
-                        </>
+                </div>
+
+                {/* Footer / Context Info */}
+                <div className="p-3 text-xs text-gray-600 border-t bg-gray-50 flex flex-col gap-1">
+                    {mode === 'js' && activeTab === 'pre_send' && (
+                        <div>Variable <code>data</code> (Array of numbers) contains bytes to send. Modify it in place or return new array.</div>
+                    )}
+                    {mode === 'js' && activeTab === 'rx' && (
+                        <div>Variable <code>data</code> (Array of numbers) contains received bytes. Modify it to filter/transform display.</div>
+                    )}
+                    {mode === 'external' && (
+                        <div>The updated data should be written to <strong>Stdout</strong>. Binary safe.</div>
                     )}
                 </div>
             </div>

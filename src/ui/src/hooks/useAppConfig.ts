@@ -5,6 +5,16 @@ import { useDebounce } from './useDebounce';
 
 const CONFIG_FILE = 'config.yaml';
 
+export interface ScriptStateConfig {
+    type: 'js' | 'external' | null;
+    content: string;
+}
+
+export interface ScriptConfig {
+    tx: ScriptStateConfig;
+    rx: ScriptStateConfig;
+}
+
 export interface SerialConfig {
     port_name: string;
     baud_rate: number;
@@ -43,6 +53,7 @@ export interface AppConfig {
     send: SendConfig;
     ui: UiConfig;
     paths: PathsConfig;
+    scripts: ScriptConfig;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -72,6 +83,10 @@ const DEFAULT_CONFIG: AppConfig = {
     },
     paths: {
         commandsFile: 'commands.yaml' // Default relative path
+    },
+    scripts: {
+        tx: { type: null, content: '' },
+        rx: { type: null, content: '' }
     }
 };
 
@@ -101,7 +116,8 @@ export function useAppConfig() {
                             terminal: { ...prev.terminal, ...parsed.terminal },
                             send: { ...prev.send, ...parsed.send },
                             ui: { ...prev.ui, ...parsed.ui },
-                            paths: { ...prev.paths, ...parsed.paths }
+                            paths: { ...prev.paths, ...parsed.paths },
+                            scripts: { ...prev.scripts, ...parsed.scripts }
                         }));
                     }
                 }
@@ -175,6 +191,16 @@ export function useAppConfig() {
         }));
     }, []);
 
+    const updateScriptConfig = useCallback((updates: Partial<ScriptConfig>) => {
+        setConfig(prev => ({
+            ...prev,
+            scripts: { ...prev.scripts, ...updates }
+        }));
+    }, []);
+
+
+
+
 
     return {
         config,
@@ -183,6 +209,7 @@ export function useAppConfig() {
         updateSendConfig,
         updateUiConfig,
         updatePathsConfig,
+        updateScriptConfig,
         loaded,
         saveStatus,
         saveError

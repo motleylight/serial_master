@@ -1,121 +1,106 @@
-use rustpython::vm;
-use rustpython::vm::builtins::PyList;
-use rustpython::vm::PyObjectRef;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use rustpython::vm::convert::TryFromObject;
+use std::io::Write;
 
 #[derive(Clone)]
 pub struct ScriptManager {
-    pub pre_send_script: Arc<Mutex<String>>,
-    pub post_send_script: Arc<Mutex<String>>,
-    pub rx_script: Arc<Mutex<String>>,
+    pub pre_send_cmd: Arc<Mutex<Option<String>>>,
+    pub rx_cmd: Arc<Mutex<Option<String>>>,
 }
 
 impl ScriptManager {
     pub fn new() -> Self {
         Self {
-            pre_send_script: Arc::new(Mutex::new(String::new())),
-            post_send_script: Arc::new(Mutex::new(String::new())),
-            rx_script: Arc::new(Mutex::new(String::new())),
+            pre_send_cmd: Arc::new(Mutex::new(None)),
+            rx_cmd: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub fn set_pre_send_script(&self, script: String) {
-        let mut s = self.pre_send_script.lock().unwrap();
-        *s = script;
+    pub fn set_pre_send_cmd(&self, cmd: Option<String>) {
+        let mut s = self.pre_send_cmd.lock().unwrap();
+        *s = cmd;
     }
 
-    pub fn set_post_send_script(&self, script: String) {
-        let mut s = self.post_send_script.lock().unwrap();
-        *s = script;
+    pub fn set_rx_cmd(&self, cmd: Option<String>) {
+        let mut s = self.rx_cmd.lock().unwrap();
+        *s = cmd;
     }
 
-    pub fn set_rx_script(&self, script: String) {
-        let mut s = self.rx_script.lock().unwrap();
-        *s = script;
+    pub fn run_external_hook(&self, data: Vec<u8>, cmd_line: &str) -> Result<Vec<u8>, String> {
+        println!("[Script] External Hook Called. Command: '{}', Data Len: {}", cmd_line, data.len());
+
+        // Use shell execution to handle command parsing and paths robustly
+        #[cfg(target_os = "windows")]
+        let (program, args) = ("cmd", vec!["/C", cmd_line]);
+        
+        #[cfg(not(target_os = "windows"))]
+        let (program, args) = ("sh", vec!["-c", cmd_line]);
+
+        println!("[Script] Spawning process: {} {:?}", program, args);
+
+        let mut child = Command::new(program)
+            .args(&args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn process '{}': {}", program, e))?;
+
+        // Write to stdin
+        if let Some(mut stdin) = child.stdin.take() {
+            println!("[Script] Writing {} bytes to stdin...", data.len());
+            if let Err(e) = stdin.write_all(&data) {
+                println!("[Script] Error writing to stdin: {}", e);
+                return Err(format!("Failed to write to stdin: {}", e));
+            }
+            // Explicitly drop stdin to close the pipe, ensuring child sees EOF
+            drop(stdin);
+            println!("[Script] Stdin closed (EOF sent). waiting for output...");
+        }
+
+        // Wait for output
+        let output = child.wait_with_output().map_err(|e| format!("Failed to wait on process: {}", e))?;
+
+        println!("[Script] Process exited. Status: {:?}, Stdout Len: {}, Stderr Len: {}", output.status, output.stdout.len(), output.stderr.len());
+
+        if !output.stderr.is_empty() {
+            let stderr_str = String::from_utf8_lossy(&output.stderr);
+            println!("[Script] Stderr content: {}", stderr_str);
+        }
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            println!("[Script] Failure detected. Exit code: {:?}", output.status.code());
+            return Err(format!("External process failed (exit code: {:?}): {}", output.status.code(), stderr));
+        }
+
+        println!("[Script] Success. Returning {} bytes.", output.stdout.len());
+        Ok(output.stdout)
     }
 
     pub fn run_pre_send(&self, data: Vec<u8>) -> Result<Vec<u8>, String> {
-        let script = {
-            let s = self.pre_send_script.lock().unwrap();
-            if s.trim().is_empty() {
-                return Ok(data);
-            }
+        let cmd = {
+            let s = self.pre_send_cmd.lock().unwrap();
             s.clone()
         };
 
-        // Initialize VM with standard library
-        match std::panic::catch_unwind(|| {
-            vm::Interpreter::without_stdlib(Default::default()).enter(|vm| {
-                 let scope = vm.new_scope_with_builtins();
-                 
-                 // ... setup (same as before) ...
-                 let elements: Vec<PyObjectRef> = data
-                    .into_iter()
-                    .map(|b| vm.ctx.new_int(b).into())
-                    .collect();
-                 let py_data = vm.ctx.new_list(elements);
-                 
-                 scope.locals.set_item("data", py_data.into(), vm).map_err(|e| format!("{:?}", e))?;
-
-                 let code_obj = vm
-                    .compile(script.as_str(), vm::compiler::Mode::Exec, "<pre_send_script>".to_owned())
-                    .map_err(|err| format!("Compile error: {:?}", err))?;
-
-                 vm.run_code_obj(code_obj, scope.clone())
-                    .map_err(|err| format!("Runtime error: {:?}", err))?;
-
-                 let result = scope.locals.get_item("data", vm).map_err(|_| "Variable 'data' missing".to_string())?;
-                 
-                 let list = result.payload::<PyList>().ok_or("Result 'data' is not a list")?;
-                 let mut output = Vec::new();
-                 for item in list.borrow_vec().iter() {
-                     let int_val = u8::try_from_object(vm, item.clone()).map_err(|_| "List item is not a valid byte (0-255)")?;
-                     output.push(int_val);
-                 }
-                 Ok(output)
-            })
-        }) {
-            Ok(res) => res,
-            Err(_) => Err("Script execution panicked".to_string()),
+        if let Some(c) = cmd {
+             self.run_external_hook(data, &c)
+        } else {
+            Ok(data)
         }
     }
 
     pub fn run_rx_script(&self, data: Vec<u8>) -> Result<Vec<u8>, String> {
-        let script = {
-            let s = self.rx_script.lock().unwrap();
-            if s.trim().is_empty() {
-                return Ok(data);
-            }
+        let cmd = {
+            let s = self.rx_cmd.lock().unwrap();
             s.clone()
         };
 
-        match std::panic::catch_unwind(|| {
-            vm::Interpreter::without_stdlib(Default::default()).enter(|vm| {
-                let scope = vm.new_scope_with_builtins();
-                let elements: Vec<PyObjectRef> = data.into_iter().map(|b| vm.ctx.new_int(b).into()).collect();
-                let py_data = vm.ctx.new_list(elements);
-                scope.locals.set_item("data", py_data.into(), vm).map_err(|e| format!("{:?}", e))?;
-
-                let code_obj = vm
-                    .compile(script.as_str(), vm::compiler::Mode::Exec, "<rx_script>".to_owned())
-                    .map_err(|err| format!("Compile error: {:?}", err))?;
-
-                vm.run_code_obj(code_obj, scope.clone())
-                    .map_err(|err| format!("Runtime error: {:?}", err))?;
-
-                let result = scope.locals.get_item("data", vm).map_err(|_| "Variable 'data' missing".to_string())?;
-                let list = result.payload::<PyList>().ok_or("Result 'data' is not a list")?;
-                let mut output = Vec::new();
-                for item in list.borrow_vec().iter() {
-                    let int_val = u8::try_from_object(vm, item.clone()).map_err(|_| "List item is not a valid byte (0-255)")?;
-                    output.push(int_val);
-                }
-                Ok(output)
-            })
-        }) {
-            Ok(res) => res,
-            Err(_) => Err("Script execution panicked".to_string()),
+        if let Some(c) = cmd {
+             self.run_external_hook(data, &c)
+        } else {
+            Ok(data)
         }
     }
 }
