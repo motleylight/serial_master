@@ -9,6 +9,7 @@ SerialMaster 是一个基于 Rust (Tauri) 和 React 的高性能现代串口调�
 - **设备管理**: 自动扫描并列出系统串口。
 - **基本通信**: 支持设置波特率 (默认 115200) 并打开/关闭串口。
 - **高性能日志**: 支持高频数据接收，具备虚拟滚动 (Virtual Scrolling) 和 Hex/ASCII 视图切换功能。
+- **持久化配置**: 支持自动保存串口参数、UI 设置 (发送模式、换行符等) 以及常用命令到 YAML 配置文件。
 - **测试工具**: 内置 Pyhon/Rust 数据生成工具用于回环测试。
 
 ---
@@ -58,6 +59,36 @@ npx @tauri-apps/cli dev
     *   **视图切换**: 点击右上角的 `ASCII` / `HEX` 按钮切换显示模式。
     *   **自动滚动**: 点击 `Auto Scroll` 图标（绿色为开启）。向上滚动日志时自动暂停跟随，拉到底部自动恢复。
     *   **清空**: 点击垃圾桶图标清空当前屏幕日志。
+
+### 2.3 配置文件与命令管理 (Configuration & Commands)
+
+SerialMaster 支持将您的使用习惯和常用命令持久化保存。所有配置文件均为 **YAML** 格式，方便阅读和手动编辑。
+
+**文件位置**:
+配置文件存储在系统的标准 AppConfig 目录下：
+*   **Windows**: `%APPDATA%\com.serialmaster.app\` (通常是 `C:\Users\YourName\AppData\Roaming\com.serialmaster.app\`)
+*   **Linux**: `~/.config/com.serialmaster.app/`
+*   **macOS**: `~/Library/Application Support/com.serialmaster.app/`
+
+**主要文件**:
+
+1.  **`config.yaml`** (自动保存)
+    *   记录上次使用的串口参数（波特率、数据位等）。
+    *   记录 UI 设置（Hex模式、换行符设置、自动滚动状态等）。
+    *   *提示*: 修改软件界面设置后会自动写入此文件，下次启动自动恢复。
+
+2.  **`commands.yaml`** (快捷指令)
+    *   记录在 "Command Manager" 侧边栏中添加的快捷指令。
+    *   支持 Hex 和 ASCII 两种格式。
+    *   **手动编辑**: 您可以直接用文本编辑器修改此文件，格式如下 (无需 ID 字段)：
+        ```yaml
+        - name: "Hello Cmd"
+          command: "Hello World"
+          isHex: false
+        - name: "Hex Ping"
+          command: "AA BB 01"
+          isHex: true
+        ```
 
 ---
 

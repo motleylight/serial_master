@@ -1,11 +1,21 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Play, Save, FolderOpen } from 'lucide-react';
 import { HexSwitch } from './ui/HexSwitch';
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { save, open } from '@tauri-apps/plugin-dialog';
+import { writeTextFile, readTextFile, BaseDirectory, exists, mkdir } from '@tauri-apps/plugin-fs';
+import yaml from 'js-yaml';
+import { useDebounce } from '../hooks/useDebounce';
 
+// Runtime command structure (includes ID for React keys)
 export interface SavedCommand {
     id: string;
+    name: string;
+    command: string;
+    isHex: boolean;
+}
+
+// Storage command structure (no ID)
+interface StoredCommand {
     name: string;
     command: string;
     isHex: boolean;
@@ -16,9 +26,66 @@ interface CommandManagerProps {
     connected: boolean;
 }
 
+const COMMANDS_FILE = 'commands.yaml';
+
 export function CommandManager({ onSend, connected }: CommandManagerProps) {
     const [commands, setCommands] = useState<SavedCommand[]>([]);
+    const [loaded, setLoaded] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Initial load
+    useEffect(() => {
+        const loadCommands = async () => {
+            try {
+                // Ensure AppConfig directory exists
+                const configExists = await exists('', { baseDir: BaseDirectory.AppConfig });
+                if (!configExists) {
+                    await mkdir('', { baseDir: BaseDirectory.AppConfig, recursive: true });
+                }
+
+                const fileExists = await exists(COMMANDS_FILE, { baseDir: BaseDirectory.AppConfig });
+                if (fileExists) {
+                    const content = await readTextFile(COMMANDS_FILE, { baseDir: BaseDirectory.AppConfig });
+                    const parsed = yaml.load(content) as StoredCommand[];
+
+                    if (Array.isArray(parsed)) {
+                        const runtimeCommands = parsed.map(c => ({
+                            id: Date.now().toString() + Math.random(),
+                            name: c.name || 'Cmd',
+                            command: c.command || '',
+                            isHex: !!c.isHex
+                        }));
+                        setCommands(runtimeCommands);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load commands:', err);
+            } finally {
+                setLoaded(true);
+            }
+        };
+        loadCommands();
+    }, []);
+
+    // Debounced Auto-save
+    const debouncedCommands = useDebounce(commands, 1000);
+
+    useEffect(() => {
+        if (!loaded) return;
+
+        const saveCommands = async () => {
+            try {
+                // Convert back to stored format (remove IDs)
+                const toSave: StoredCommand[] = debouncedCommands.map(({ id, ...rest }) => rest);
+                const yamlString = yaml.dump(toSave);
+
+                await writeTextFile(COMMANDS_FILE, yamlString, { baseDir: BaseDirectory.AppConfig });
+            } catch (err) {
+                console.error('Failed to auto-save commands:', err);
+            }
+        };
+        saveCommands();
+    }, [debouncedCommands, loaded]);
 
     const handleAdd = () => {
         const newCmd: SavedCommand = {
@@ -42,33 +109,42 @@ export function CommandManager({ onSend, connected }: CommandManagerProps) {
         try {
             const path = await save({
                 filters: [{
-                    name: 'JSON Files',
-                    extensions: ['json']
+                    name: 'YAML Files',
+                    extensions: ['yaml', 'yml']
                 }],
-                defaultPath: 'serial_commands.json'
+                defaultPath: 'serial_commands.yaml'
             });
 
             if (!path) return;
 
-            const content = JSON.stringify(commands, null, 2);
+            const toSave: StoredCommand[] = commands.map(({ id, ...rest }) => rest);
+            const content = yaml.dump(toSave);
             await writeTextFile(path, content);
         } catch (err) {
             console.error('Failed to export commands:', err);
         }
     };
 
-    const handleImportClick = () => {
-        fileInputRef.current?.click();
-    };
+    const handleImportClick = async () => {
+        try {
+            const selected = await open({
+                multiple: false,
+                filters: [{
+                    name: 'YAML/JSON Files',
+                    extensions: ['yaml', 'yml', 'json']
+                }]
+            });
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+            if (selected && typeof selected === 'string') {
+                const content = await readTextFile(selected);
+                let imported: any;
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const imported = JSON.parse(event.target?.result as string);
+                if (selected.endsWith('.json')) {
+                    imported = JSON.parse(content);
+                } else {
+                    imported = yaml.load(content);
+                }
+
                 if (Array.isArray(imported)) {
                     const validated = imported.map((c: any) => ({
                         id: c.id || Date.now().toString() + Math.random(),
@@ -76,14 +152,16 @@ export function CommandManager({ onSend, connected }: CommandManagerProps) {
                         command: c.command || '',
                         isHex: !!c.isHex,
                     }));
-                    setCommands(validated);
+
+                    // Option to merge or replace? Let's append for safety or replace? 
+                    // Usually import implies loading a set. Let's append to avoid losing current work unless user clears.
+                    // Or typically "Load" might replace. Let's Append.
+                    setCommands(prev => [...prev, ...validated]);
                 }
-            } catch (err) {
-                console.error("Failed to parse file", err);
             }
-        };
-        reader.readAsText(file);
-        e.target.value = '';
+        } catch (err) {
+            console.error('Failed to import commands:', err);
+        }
     };
 
     const executeCommand = (cmd: SavedCommand) => {
@@ -121,19 +199,18 @@ export function CommandManager({ onSend, connected }: CommandManagerProps) {
                         <Plus className="w-3.5 h-3.5" />
                     </button>
                     <div className="w-[1px] h-4 bg-border mx-1 self-center" />
-                    <button onClick={handleImportClick} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Load Commands">
+                    <button onClick={handleImportClick} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Import Commands (YAML/JSON)">
                         <FolderOpen className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={handleExport} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Save Commands">
+                    <button onClick={handleExport} className="p-1 hover:bg-black/10 rounded border border-transparent hover:border-border" title="Export Commands (YAML)">
                         <Save className="w-3.5 h-3.5" />
                     </button>
 
+                    {/* Input ref no longer needed with plugin-dialog but kept if we revert */}
                     <input
                         type="file"
                         ref={fileInputRef}
-                        onChange={handleFileChange}
                         className="hidden"
-                        accept=".json"
                     />
                 </div>
             </div>

@@ -8,6 +8,7 @@ import { ControlPanel } from './components/ControlPanel';
 import { CommandManager } from './components/CommandManager';
 import { cn } from './lib/utils';
 import { ScriptEditor } from './components/ScriptEditor';
+import { useAppConfig } from './hooks/useAppConfig';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -42,6 +43,9 @@ const MAX_LOG_COUNT = 10000;
 const BATCH_UPDATE_INTERVAL = 100; // ms
 
 function App() {
+  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig } = useAppConfig();
+  const serialConfig = config.serial;
+
   const [logs, setLogs] = useState<LogData[]>([]);
   const [connected, setConnected] = useState(false);
   const [showSidePanel, setShowSidePanel] = useState(true);
@@ -53,15 +57,6 @@ function App() {
   const batchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Counter for unique IDs (more reliable than Date.now() + random)
   const logIdCounterRef = useRef(0);
-
-  const [serialConfig, setSerialConfig] = useState<SerialConfig>({
-    port_name: '',
-    baud_rate: 115200,
-    data_bits: 8,
-    flow_control: 'None',
-    parity: 'None',
-    stop_bits: 1
-  });
 
   // Flush buffer to state
   const flushLogBuffer = useCallback(() => {
@@ -144,7 +139,7 @@ function App() {
   };
 
   const handleConfigUpdate = (newConfig: SerialConfig) => {
-    setSerialConfig(newConfig);
+    updateSerialConfig(newConfig);
     if (connected) {
       // Hot-reload: Reconnect with new config
       // Pass newConfig explicitly to avoid stale state
@@ -197,7 +192,12 @@ function App() {
               <div className="flex-1 min-h-0 relative">
                 <div className="absolute inset-0 p-2 pb-0">
                   <div className="h-full border border-border/40 rounded-md overflow-hidden shadow-inner bg-white">
-                    <TerminalContainer logs={logs} onClear={handleClear} />
+                    <TerminalContainer
+                      logs={logs}
+                      onClear={handleClear}
+                      config={config.terminal}
+                      onConfigChange={updateTerminalConfig}
+                    />
                   </div>
                 </div>
               </div>
@@ -212,6 +212,8 @@ function App() {
                   onDisconnect={handleDisconnect}
                   onSend={handleSend}
                   onOpenScripting={() => setShowScriptEditor(true)}
+                  sendConfig={config.send}
+                  onSendConfigChange={updateSendConfig}
                 />
               </div>
 

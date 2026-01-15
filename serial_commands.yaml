@@ -1,0 +1,9 @@
+- name: Cmd
+  command: 撒地方
+  isHex: false
+- name: Cmd
+  command: wafeads
+  isHex: false
+- name: 我的家
+  command: 08 05 04
+  isHex: true

@@ -5,6 +5,7 @@ import { RefreshCw, Link, Link2Off, Send, ChevronDown } from "lucide-react";
 import { HexSwitch } from "./ui/HexSwitch";
 import { PortSelect } from "./ui/PortSelect";
 import { PortSharingToggle } from "./PortSharingToggle";
+import { SendConfig } from "../hooks/useAppConfig";
 
 interface ControlPanelProps {
     config: SerialConfig;
@@ -14,6 +15,8 @@ interface ControlPanelProps {
     onDisconnect: () => void;
     onSend: (data: Uint8Array | number[]) => void;
     onOpenScripting: () => void;
+    sendConfig: SendConfig;
+    onSendConfigChange: (config: Partial<SendConfig>) => void;
 }
 
 export function ControlPanel({
@@ -24,6 +27,8 @@ export function ControlPanel({
     onDisconnect,
     onSend,
     onOpenScripting,
+    sendConfig,
+    onSendConfigChange,
 }: ControlPanelProps) {
     // --- Settings Logic ---
     const [ports, setPorts] = useState<SerialPortInfo[]>([]);
@@ -57,8 +62,14 @@ export function ControlPanel({
 
     // --- Input Logic ---
     const [input, setInput] = useState('');
-    const [isHex, setIsHex] = useState(false);
-    const [appendMode, setAppendMode] = useState<'None' | 'CR' | 'LF' | 'CRLF'>('None');
+    // Removed local isHex/appendMode state in favor of props
+    // const [isHex, setIsHex] = useState(false);
+    // const [appendMode, setAppendMode] = useState<'None' | 'CR' | 'LF' | 'CRLF'>('None');
+
+    // Derived values for convenience
+    const isHex = sendConfig?.hexMode ?? false;
+    const appendMode = sendConfig?.appendMode ?? 'None';
+
     const [history, setHistory] = useState<string[]>([]);
     const [historyIndex, setHistoryIndex] = useState(-1);
 
@@ -251,7 +262,7 @@ export function ControlPanel({
             <div className="flex items-center gap-2 p-1.5 bg-background">
                 <HexSwitch
                     checked={isHex}
-                    onChange={setIsHex}
+                    onChange={(val) => onSendConfigChange({ hexMode: val })}
                     size="sm"
                 />
 
@@ -271,7 +282,7 @@ export function ControlPanel({
                         <div className="absolute right-1 top-1/2 -translate-y-1/2">
                             <select
                                 value={appendMode}
-                                onChange={(e) => setAppendMode(e.target.value as any)}
+                                onChange={(e) => onSendConfigChange({ appendMode: e.target.value as any })}
                                 className="h-6 text-[10px] bg-transparent border-none text-muted-foreground focus:ring-0 cursor-pointer hover:bg-black/5 rounded px-1"
                                 title="Line Ending"
                             >

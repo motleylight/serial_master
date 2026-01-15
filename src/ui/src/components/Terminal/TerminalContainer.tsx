@@ -8,10 +8,13 @@ import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { useDebounce } from '../../hooks/useDebounce';
 import { List, type ListImperativeAPI, type RowComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
+import { TerminalConfig } from '../../hooks/useAppConfig';
 
 interface TerminalContainerProps {
     logs: LogData[];
     onClear: () => void;
+    config: TerminalConfig;
+    onConfigChange: (config: Partial<TerminalConfig>) => void;
 }
 
 const ROW_HEIGHT = 24;
@@ -36,6 +39,16 @@ const getLogText = (log: LogData): string => {
 const normalizeLineEndings = (text: string): string => {
     return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 };
+
+// ... (keep matching functions as they are, assume context remains) ...
+// Actually replace_file_content needs context matches. I'm replacing top part.
+// I will not replace the helper functions, so I should be careful to target correctly.
+// I'll skip re-declaring helpers in ReplacementContent if I can target specific block.
+// But I need to update TerminalContainer implementation which is further down.
+// I will split into two edits if needed, or target the component definition.
+
+// Strategy: Import first. Then Component definition.
+
 
 // 普通字符串匹配
 const findSimpleMatches = (
@@ -195,9 +208,41 @@ const LogRow = ({ index, style, logs, viewMode, matchResults, currentMatchIndex,
     );
 };
 
-export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => {
-    const [autoScroll, setAutoScroll] = useState(true);
-    const [viewMode, setViewMode] = useState<ViewMode>('ASCII');
+export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: TerminalContainerProps) => {
+    // Local state initialized from config, kept in sync via useEffect
+    const [autoScroll, setAutoScroll] = useState(config.autoScroll);
+    const [viewMode, setViewMode] = useState<ViewMode>(config.hexMode ? 'HEX' : 'ASCII');
+    const [wordWrap, setWordWrap] = useState(config.wordWrap);
+
+    // Sync from config (External updates)
+    useEffect(() => {
+        setAutoScroll(config.autoScroll);
+    }, [config.autoScroll]);
+
+    useEffect(() => {
+        setViewMode(config.hexMode ? 'HEX' : 'ASCII');
+    }, [config.hexMode]);
+
+    useEffect(() => {
+        setWordWrap(config.wordWrap);
+    }, [config.wordWrap]);
+
+    // Helper to update both local and config
+    const updateAutoScroll = (val: boolean) => {
+        setAutoScroll(val);
+        onConfigChange({ autoScroll: val });
+    };
+
+    const updateViewMode = (val: ViewMode) => {
+        setViewMode(val);
+        onConfigChange({ hexMode: val === 'HEX' });
+    };
+
+    const updateWordWrap = (val: boolean) => {
+        setWordWrap(val);
+        onConfigChange({ wordWrap: val });
+    };
+
     const [searchMode, setSearchMode] = useState<SearchMode>('search');
     const [searchText, setSearchText] = useState('');
     const [replaceText, setReplaceText] = useState('');
@@ -211,8 +256,8 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
 
     // 展开替换行（VSCode 风格）
     const [showReplace, setShowReplace] = useState(false);
-    const [wordWrap, setWordWrap] = useState(false);
 
+    // ... useDebounce hooks
     const debouncedSearchText = useDebounce(searchText, 300);
     const debouncedReplaceText = useDebounce(replaceText, 300);
     const debouncedContextLines = useDebounce(contextLines, 300);
@@ -519,7 +564,7 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                         <div className="h-4 w-[1px] bg-border mx-1" />
                         <HexSwitch
                             checked={viewMode === 'HEX'}
-                            onChange={(checked) => setViewMode(checked ? 'HEX' : 'ASCII')}
+                            onChange={(checked) => updateViewMode(checked ? 'HEX' : 'ASCII')}
                             size="sm"
                         />
                         <div className="h-4 w-[1px] bg-border mx-2" />
@@ -660,7 +705,7 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                         <div className="h-4 w-[1px] bg-border mx-1" />
                         <div className="flex gap-1">
                             <button
-                                onClick={() => setWordWrap(!wordWrap)}
+                                onClick={() => updateWordWrap(!wordWrap)}
                                 className={cn(
                                     "p-1 rounded transition-colors",
                                     wordWrap ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-black/5"
@@ -671,7 +716,7 @@ export const TerminalContainer = ({ logs, onClear }: TerminalContainerProps) => 
                             </button>
                             <button
                                 onClick={() => {
-                                    setAutoScroll(!autoScroll);
+                                    updateAutoScroll(!autoScroll);
                                     // Set temporary override to ignore scroll events
                                     if (userManualOverrideRef.current) {
                                         clearTimeout(userManualOverrideRef.current);
