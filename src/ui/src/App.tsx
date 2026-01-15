@@ -221,6 +221,7 @@ function App() {
                   <div className="h-full border border-border/40 rounded-md overflow-hidden shadow-inner bg-white">
                     <TerminalContainer
                       logs={logs}
+                      setLogs={setLogs}
                       onClear={handleClear}
                       config={config.terminal}
                       onConfigChange={updateTerminalConfig}

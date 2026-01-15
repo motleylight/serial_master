@@ -23,6 +23,7 @@ interface LogEntryProps {
     highlights?: HighlightRange[];
     isCurrentMatch?: boolean;
     wordWrap?: boolean;
+    showMetadata?: boolean;
 }
 
 const formatHex = (data: Uint8Array): string => {
@@ -36,6 +37,34 @@ const formatAscii = (data: Uint8Array): string => {
     return Array.from(data)
         .map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.')
         .join('');
+};
+
+export const formatLogLine = (entry: LogData, showMetadata: boolean, mode: ViewMode): string => {
+    if (entry.type === 'SEP') {
+        return '---';
+    }
+
+    const date = new Date(entry.timestamp);
+    const timeStr = date.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + `.${date.getMilliseconds().toString().padStart(3, '0')}`;
+
+    let content = '';
+    if (typeof entry.data === 'string') {
+        content = entry.data;
+    } else {
+        if (mode === 'HEX') {
+            content = formatHex(entry.data);
+        } else if (mode === 'ASCII') {
+            content = formatAscii(entry.data);
+        } else {
+            content = `${formatHex(entry.data)}  |  ${formatAscii(entry.data)}`;
+        }
+    }
+
+    if (!showMetadata) {
+        return content;
+    }
+
+    return `[${timeStr}] [${entry.type}] ${content}`;
 };
 
 // 渲染带高亮的文本
@@ -78,7 +107,7 @@ const renderHighlightedText = (text: string, highlights?: HighlightRange[], isCu
     return result;
 };
 
-export const LogEntry = React.memo(({ entry, mode, style, index, highlights, isCurrentMatch, wordWrap = false }: LogEntryProps) => {
+export const LogEntry = React.memo(({ entry, mode, style, index, highlights, isCurrentMatch, wordWrap = false, showMetadata = true }: LogEntryProps) => {
     const date = new Date(entry.timestamp);
     const timeStr = date.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + `.${date.getMilliseconds().toString().padStart(3, '0')}`;
 
@@ -126,8 +155,12 @@ export const LogEntry = React.memo(({ entry, mode, style, index, highlights, isC
             index % 2 === 0 ? "bg-gray-50" : "bg-white",
             isCurrentMatch && "bg-orange-50"
         )}>
-            <span className="text-gray-500 opacity-70 select-none">[{timeStr}]</span>
-            <span className={cn("font-bold w-8 shrink-0", typeColor)}>{entry.type}</span>
+            {showMetadata && (
+                <>
+                    <span className="text-gray-500 opacity-70 select-none">[{timeStr}]</span>
+                    <span className={cn("font-bold w-8 shrink-0", typeColor)}>{entry.type}</span>
+                </>
+            )}
             <span className={cn("flex-1", wordWrap ? "" : "truncate")}>{renderedContent}</span>
         </div>
     );

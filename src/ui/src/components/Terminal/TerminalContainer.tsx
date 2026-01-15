@@ -1,10 +1,10 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { type LogData, type HighlightRange, LogEntry, type ViewMode } from './LogEntry';
+import { type LogData, type HighlightRange, LogEntry, type ViewMode, formatLogLine } from './LogEntry';
 import { cn } from '../../lib/utils';
-import { Trash2, Save, PanelRight, Search, ChevronUp, ChevronDown, ChevronRight, WrapText } from 'lucide-react';
+import { Trash2, Save as SaveIcon, PanelRight, Search, ChevronUp, ChevronDown, ChevronRight, WrapText, FolderOpen } from 'lucide-react';
 import { HexSwitch } from '../ui/HexSwitch';
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { save, open } from '@tauri-apps/plugin-dialog';
+import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useDebounce } from '../../hooks/useDebounce';
 import { List, type ListImperativeAPI, type RowComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
@@ -12,6 +12,7 @@ import { TerminalConfig } from '../../hooks/useAppConfig';
 
 interface TerminalContainerProps {
     logs: LogData[];
+    setLogs?: (logs: LogData[]) => void;
     onClear: () => void;
     config: TerminalConfig;
     onConfigChange: (config: Partial<TerminalConfig>) => void;
@@ -185,9 +186,10 @@ interface LogRowProps {
     currentMatchIndex: number;
     matchedLogIndices: number[];
     wordWrap: boolean;
+    showMetadata: boolean;
 }
 
-const LogRow = ({ index, style, logs, viewMode, matchResults, currentMatchIndex, matchedLogIndices, wordWrap }: RowComponentProps<LogRowProps>) => {
+const LogRow = ({ index, style, logs, viewMode, matchResults, currentMatchIndex, matchedLogIndices, wordWrap, showMetadata }: RowComponentProps<LogRowProps>) => {
     const log = logs[index];
     if (!log) return null;
 
@@ -204,15 +206,17 @@ const LogRow = ({ index, style, logs, viewMode, matchResults, currentMatchIndex,
             highlights={matchResult?.highlights}
             isCurrentMatch={isCurrentMatch}
             wordWrap={wordWrap}
+            showMetadata={showMetadata}
         />
     );
 };
 
-export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: TerminalContainerProps) => {
+export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChange }: TerminalContainerProps) => {
     // Local state initialized from config, kept in sync via useEffect
     const [autoScroll, setAutoScroll] = useState(config.autoScroll);
     const [viewMode, setViewMode] = useState<ViewMode>(config.hexMode ? 'HEX' : 'ASCII');
     const [wordWrap, setWordWrap] = useState(config.wordWrap);
+    const [showMetadata, setShowMetadata] = useState(true);
 
     // Sync from config (External updates)
     useEffect(() => {
@@ -270,6 +274,7 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
     // 用户手动切换 autoScroll 后的冷却时间，防止 handleRowsRendered 覆盖用户选择
     const userManualOverrideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Validating regex
     useEffect(() => {
         if (isRegex && debouncedSearchText) {
             try {
@@ -283,13 +288,19 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
         }
     }, [debouncedSearchText, isRegex, caseSensitive]);
 
+    // Filter logs based on metadata visibility
+    const visibleLogs = useMemo(() => {
+        if (showMetadata) return logs;
+        return logs.filter(log => log.type !== 'SYS');
+    }, [logs, showMetadata]);
+
     const matchResults = useMemo((): Map<number, MatchResult> => {
         if (!debouncedSearchText || viewMode === 'HEX') {
             return new Map();
         }
 
         if (!isRegex) {
-            return findSimpleMatches(logs, debouncedSearchText, caseSensitive);
+            return findSimpleMatches(visibleLogs, debouncedSearchText, caseSensitive);
         }
 
         if (!isRegexValid) {
@@ -300,12 +311,12 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
             const flags = caseSensitive ? 'g' : 'gi';
             const regex = new RegExp(debouncedSearchText, flags);
             return enableCrossLine
-                ? findCrossLineMatches(logs, regex)
-                : findSingleLineMatches(logs, regex);
+                ? findCrossLineMatches(visibleLogs, regex)
+                : findSingleLineMatches(visibleLogs, regex);
         } catch {
             return new Map();
         }
-    }, [logs, debouncedSearchText, isRegex, isRegexValid, caseSensitive, viewMode, enableCrossLine]);
+    }, [visibleLogs, debouncedSearchText, isRegex, isRegexValid, caseSensitive, viewMode, enableCrossLine]);
 
     const matchedLogIndices = useMemo(() => {
         return Array.from(matchResults.keys()).sort((a, b) => a - b);
@@ -317,7 +328,7 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
 
     const { filterResult, filterIndexMap } = useMemo(() => {
         if (!debouncedSearchText) {
-            return { filterResult: logs, filterIndexMap: null };
+            return { filterResult: visibleLogs, filterIndexMap: null };
         }
 
         const matchIndices = new Set(matchResults.keys());
@@ -339,7 +350,7 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
 
         matchIndices.forEach(idx => {
             const start = Math.max(0, idx - ctx);
-            const end = Math.min(logs.length - 1, idx + ctx);
+            const end = Math.min(visibleLogs.length - 1, idx + ctx);
             for (let i = start; i <= end; i++) {
                 linesToShow.add(i);
             }
@@ -361,7 +372,7 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
             }
             prevIdx = idx;
 
-            const log = logs[idx];
+            const log = visibleLogs[idx];
             const isDirectMatch = matchIndices.has(idx);
             let modifiedLog = log;
 
@@ -380,9 +391,9 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
         });
 
         return { filterResult: result, filterIndexMap: indexMap };
-    }, [logs, debouncedSearchText, debouncedReplaceText, showReplace, debouncedContextLines, matchResults, isRegex, isRegexValid, caseSensitive]);
+    }, [visibleLogs, debouncedSearchText, debouncedReplaceText, showReplace, debouncedContextLines, matchResults, isRegex, isRegexValid, caseSensitive]);
 
-    const displayLogs = searchMode === 'filter' ? filterResult : logs;
+    const displayLogs = searchMode === 'filter' ? filterResult : visibleLogs;
 
     const displayMatchResults = useMemo((): Map<number, MatchResult> => {
         if (searchMode !== 'filter' || !filterIndexMap) {
@@ -518,21 +529,96 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
             if (!path) return;
 
             let content = '';
-            displayLogs.forEach(log => {
-                if (log.type === 'SEP') return;
-                const date = new Date(log.timestamp).toISOString();
-                let dataStr = '';
-                if (typeof log.data === 'string') {
-                    dataStr = log.data;
-                } else {
-                    dataStr = Array.from(log.data).map(b => b.toString(16).padStart(2, '0')).join(' ');
-                }
-                content += `[${date}] [${log.type}] ${dataStr}\n`;
+            // Save what is currently visible (including filtered out SYS?) 
+            // The requirement "WYSIWYG" implies we save visibleLogs.
+            // If SYS is hidden via Info=Off, it should not be in the file?
+            // "if this button off, sys entire message disappear" -> "WYSIWYG" -> save should exclude it.
+            // Using displayLogs (which is based on visibleLogs) ensures we save what we see.
+            // BUT, displayLogs is ALSO affected by SEARCH FILTER.
+            // Usually SAVE saves everything. 
+            // However, the rule "hide SYS entire message" suggests it's a view filter effectively cleaning the data stream view.
+            // Let's assume we save `visibleLogs` (all logs minus hidden SYS), but ignoring Search filters.
+
+            // Wait, standard Save usually saves everything. But if I hide SYS, maybe I don't want to save SYS.
+            // Let's stick to the prompt: "ensure current displayed and saved are consistent".
+            // If I search filter, I usually still want to save the "full" (but maybe metadata-less) log?
+            // Actually, if I am in filter mode, I see only filtered lines. Should I save only filtered lines?
+            // Usually "Save Log" implies saving the session.
+            // But "WYSIWYG" implies saving what I see.
+            // Let's use `visibleLogs` (which respects Info toggle) but NOT `displayLogs` (which respects Search).
+            // This is a safe middle ground: Info toggle acts as a global view setting (like a channel filter), while Search is temporary.
+            // So I will iterate `visibleLogs`.
+
+            visibleLogs.forEach(log => {
+                content += formatLogLine(log, showMetadata, viewMode) + '\n';
             });
 
             await writeTextFile(path, content);
         } catch (err) {
             console.error('Failed to save log:', err);
+        }
+    };
+
+    const handleLoadLog = async () => {
+        if (!setLogs) return;
+
+        try {
+            const path = await open({
+                filters: [{
+                    name: 'Log Files',
+                    extensions: ['txt', 'log']
+                }]
+            });
+
+            if (!path || Array.isArray(path)) return;
+
+            const content = await readTextFile(path);
+            const lines = content.split(/\r?\n/);
+
+            const newLogs: LogData[] = [];
+            const now = Date.now();
+            const logRegex = /^\[(\d{2}:\d{2}:\d{2}\.\d{3})\] \[(\w+)\] (.*)$/;
+
+            let metadataMatchCount = 0;
+            let validLineCount = 0;
+
+            lines.forEach((line, index) => {
+                if (!line.trim()) return;
+                validLineCount++;
+
+                const match = line.match(logRegex);
+                if (match) {
+                    metadataMatchCount++;
+                    const [, timeStr, typeStr, dataStr] = match;
+                    newLogs.push({
+                        id: now + index,
+                        timestamp: now,
+                        type: typeStr as any,
+                        data: dataStr
+                    });
+                } else {
+                    // Fallback to RX so it is visible even if Info is off
+                    newLogs.push({
+                        id: now + index,
+                        timestamp: now,
+                        type: 'RX',
+                        data: line
+                    });
+                }
+            });
+
+            setLogs(newLogs);
+
+            // Auto-detect metadata
+            // If more than 50% of lines have metadata, show it. Otherwise hide it.
+            if (validLineCount > 0 && (metadataMatchCount / validLineCount) > 0.5) {
+                setShowMetadata(true);
+            } else {
+                setShowMetadata(false);
+            }
+
+        } catch (err) {
+            console.error('Failed to load log:', err);
         }
     };
 
@@ -542,8 +628,9 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
         matchResults: displayMatchResults,
         currentMatchIndex,
         matchedLogIndices: displayMatchedLogIndices,
-        wordWrap: wordWrap
-    }), [displayLogs, viewMode, displayMatchResults, currentMatchIndex, displayMatchedLogIndices, wordWrap]);
+        wordWrap: wordWrap,
+        showMetadata
+    }), [displayLogs, viewMode, displayMatchResults, currentMatchIndex, displayMatchedLogIndices, wordWrap, showMetadata]);
 
     const totalMatches = displayMatchedLogIndices.length;
 
@@ -552,22 +639,41 @@ export const TerminalContainer = ({ logs, onClear, config, onConfigChange }: Ter
             {/* Toolbar - Grid Layout for Strict Alignment */}
             <div className="border-b border-border bg-muted">
                 {/* Row 1: Main Controls */}
-                <div className="grid grid-cols-[180px_110px_1fr_auto_auto] items-center px-2 py-1 gap-2">
-                    {/* COL 1: LEFT CONTROLS (Fixed 180px) */}
-                    <div className="flex items-center gap-2 justify-start">
+                <div className="grid grid-cols-[auto_110px_1fr_auto_auto] items-center px-2 py-1 gap-2">
+                    {/* COL 1: LEFT CONTROLS (Auto width) */}
+                    <div className="flex items-center gap-1 justify-start">
                         <button onClick={onClear} className="p-1 hover:bg-black/10 rounded" title="Clear Output">
                             <Trash2 className="w-4 h-4 text-muted-foreground" />
                         </button>
+                        {setLogs && (
+                            <button onClick={handleLoadLog} className="p-1 hover:bg-black/10 rounded" title="Load Log">
+                                <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                        )}
                         <button onClick={handleSaveLog} className="p-1 hover:bg-black/10 rounded" title="Save Log">
-                            <Save className="w-4 h-4 text-muted-foreground" />
+                            <SaveIcon className="w-4 h-4 text-muted-foreground" />
                         </button>
+
+                        <div className="h-4 w-[1px] bg-border mx-1" />
+
+                        <button
+                            onClick={() => setShowMetadata(!showMetadata)}
+                            className={cn(
+                                "px-2 py-0.5 rounded text-[10px] font-medium border border-transparent transition-colors whitespace-nowrap",
+                                showMetadata ? "bg-primary/10 text-primary border-primary/20" : "text-muted-foreground hover:bg-black/5"
+                            )}
+                            title="Toggle Timestamp & Info & SYS messages"
+                        >
+                            Info
+                        </button>
+
                         <div className="h-4 w-[1px] bg-border mx-1" />
                         <HexSwitch
                             checked={viewMode === 'HEX'}
                             onChange={(checked) => updateViewMode(checked ? 'HEX' : 'ASCII')}
                             size="sm"
                         />
-                        <div className="h-4 w-[1px] bg-border mx-2" />
+                        <div className="h-4 w-[1px] bg-border mx-1" />
                     </div>
 
                     {/* COL 2: TOGGLE (Fixed 110px) */}
