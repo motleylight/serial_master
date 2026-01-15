@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, Play, Save, FolderOpen } from 'lucide-react';
 import { HexSwitch } from './ui/HexSwitch';
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { writeTextFile, readTextFile, BaseDirectory, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { writeTextFile, readTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { BaseDirectory } from '@tauri-apps/api/path';
 import yaml from 'js-yaml';
 import { useDebounce } from '../hooks/useDebounce';
 

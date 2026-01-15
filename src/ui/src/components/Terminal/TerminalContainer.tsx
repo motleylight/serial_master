@@ -589,7 +589,7 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                 const match = line.match(logRegex);
                 if (match) {
                     metadataMatchCount++;
-                    const [, timeStr, typeStr, dataStr] = match;
+                    const [, _timeStr, typeStr, dataStr] = match;
                     newLogs.push({
                         id: now + index,
                         timestamp: now,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { readTextFile, writeTextFile, BaseDirectory, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { readTextFile, writeTextFile, exists } from '@tauri-apps/plugin-fs';
+import { BaseDirectory } from '@tauri-apps/api/path';
 import yaml from 'js-yaml';
 import { useDebounce } from './useDebounce';
 
