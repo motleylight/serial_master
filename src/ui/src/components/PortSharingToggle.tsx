@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { PortSharingService, SharingStatus } from "../services/ipc";
-import { cn } from "../lib/utils";
 import { Share2, AlertTriangle, X } from "lucide-react";
 
 interface PortSharingToggleProps {
