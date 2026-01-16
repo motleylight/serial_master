@@ -16,6 +16,7 @@ interface ControlPanelProps {
     onDisconnect: () => void;
     onSend: (data: Uint8Array | number[]) => void;
     onOpenScripting: () => void;
+    onOpenPortSharing: () => void;
     sendConfig: SendConfig;
     onSendConfigChange: (config: Partial<SendConfig>) => void;
     ui: UiConfig;
@@ -30,6 +31,7 @@ export function ControlPanel({
     onDisconnect,
     onSend,
     onOpenScripting,
+    onOpenPortSharing,
     sendConfig,
     onSendConfigChange,
     ui,
@@ -257,8 +259,7 @@ export function ControlPanel({
                 {/* Port Sharing Toggle */}
                 <div className="ml-auto">
                     <PortSharingToggle
-                        physicalPort={config.port_name}
-                        isConnected={connected}
+                        onClick={onOpenPortSharing}
                     />
                 </div>
 

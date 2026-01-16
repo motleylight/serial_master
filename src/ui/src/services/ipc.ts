@@ -88,8 +88,8 @@ export interface PortPair {
 
 export interface SharingStatus {
     enabled: boolean;
-    port_pair: PortPair | null;
-    external_port: string | null;
+    port_pairs: PortPair[];
+    physical_port: string | null;
 }
 
 export class PortSharingService {
@@ -98,9 +98,19 @@ export class PortSharingService {
      */
     static async isCom0comInstalled(): Promise<boolean> {
         if (!isTauri()) {
-            return false; // Mock: 未安装
+            return false;
         }
         return invoke('check_com0com_installed');
+    }
+
+    /**
+     * 检测 hub4com 是否已安装
+     */
+    static async isHub4comInstalled(): Promise<boolean> {
+        if (!isTauri()) {
+            return false;
+        }
+        return invoke('check_hub4com_installed');
     }
 
     /**
@@ -108,9 +118,39 @@ export class PortSharingService {
      */
     static async getVirtualPairs(): Promise<PortPair[]> {
         if (!isTauri()) {
-            return []; // Mock: 空列表
+            return [];
         }
         return invoke('get_virtual_pairs');
+    }
+
+    /**
+     * 创建虚拟端口对
+     */
+    static async createVirtualPair(nameA: string, nameB: string): Promise<PortPair> {
+        if (!isTauri()) {
+            return { pair_id: 99, port_a: "MOCK_A", port_b: "MOCK_B" };
+        }
+        return invoke('create_virtual_pair', { nameA, nameB });
+    }
+
+    /**
+     * 移除虚拟端口对
+     */
+    static async removeVirtualPair(pairId: number): Promise<void> {
+        if (!isTauri()) {
+            return;
+        }
+        return invoke('remove_virtual_pair', { pairId });
+    }
+
+    /**
+     * 重命名虚拟端口对
+     */
+    static async renameVirtualPair(pairId: number, nameA: string, nameB: string): Promise<void> {
+        if (!isTauri()) {
+            return;
+        }
+        return invoke('rename_virtual_pair', { pairId, nameA, nameB });
     }
 
     /**
@@ -118,7 +158,7 @@ export class PortSharingService {
      */
     static async getSharingStatus(): Promise<SharingStatus> {
         if (!isTauri()) {
-            return { enabled: false, port_pair: null, external_port: null };
+            return { enabled: false, port_pairs: [], physical_port: null };
         }
         return invoke('get_sharing_status');
     }
@@ -126,23 +166,23 @@ export class PortSharingService {
     /**
      * 启用端口共享模式
      * @param physicalPort 当前连接的物理端口名
-     * @returns 供其他软件使用的虚拟端口名
+     * @param virtualPairIds 选中的虚拟端口对ID列表
      */
-    static async enableSharing(physicalPort: string): Promise<string> {
+    static async startSharing(physicalPort: string, virtualPairIds: number[], baudRate?: number): Promise<void> {
         if (!isTauri()) {
-            return "COM99"; // Mock 返回
+            return;
         }
-        return invoke('enable_port_sharing', { physicalPort });
+        return invoke('start_port_sharing', { physicalPort, virtualPairIds, baudRate });
     }
 
     /**
      * 禁用端口共享模式
      */
-    static async disableSharing(): Promise<void> {
+    static async stopSharing(): Promise<void> {
         if (!isTauri()) {
             return;
         }
-        return invoke('disable_port_sharing');
+        return invoke('stop_port_sharing');
     }
 }
 

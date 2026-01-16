@@ -9,6 +9,44 @@ use tokio::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Check for admin-service flag BEFORE loading Tauri
+    use clap::Parser;
+
+    #[derive(Parser, Debug)]
+    #[command(author, version, about, long_about = None)]
+    struct Args {
+        /// Run as background admin service
+        #[arg(long)]
+        admin_service: bool,
+    }
+
+    // Try to parse args. Note: Tauri also parses args? 
+    // Usually Tauri apps ignore unknown args or we can just peek env::args.
+    // Clap might complain about tauri args if we are strict.
+    // Let's just check raw args for simplicity and robustness against tauri flags.
+    let args: Vec<String> = std::env::args().collect();
+    if args.contains(&"--admin-service".to_string()) {
+        // Run Admin Service
+        // Need to enable logging for this process too?
+        env_logger::init(); 
+        
+        let mut parent_pid = None;
+        if let Some(idx) = args.iter().position(|r| r == "--parent-pid") {
+            if let Some(pid_str) = args.get(idx + 1) {
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    parent_pid = Some(pid);
+                }
+            }
+        }
+
+        log::info!("Starting SerialMaster Admin Service... Parent PID: {:?}", parent_pid);
+        match serial_master::core::admin_service::AdminService::run(parent_pid) {
+            Ok(_) => log::info!("Admin Service exited cleanly."),
+            Err(e) => log::error!("Admin Service error: {}", e),
+        }
+        std::process::exit(0);
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
@@ -68,11 +106,29 @@ pub fn run() {
             commands::set_script,
             // 端口共享命令
             commands::check_com0com_installed,
+            commands::check_hub4com_installed,
             commands::get_virtual_pairs,
+            commands::create_virtual_pair,
+            commands::remove_virtual_pair,
+            commands::rename_virtual_pair,
             commands::get_sharing_status,
-            commands::enable_port_sharing,
-            commands::disable_port_sharing
+            commands::start_port_sharing,
+            commands::stop_port_sharing
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Explicitly shutdown Admin Service on exit
+                let _ = std::thread::spawn(|| {
+                     use serial_master::core::ipc::{AdminRequest, AdminResponse};
+                     use std::net::TcpStream;
+                     if let Ok(mut stream) = TcpStream::connect("127.0.0.1:56789") {
+                         let req = AdminRequest::Shutdown;
+                         let _ = serde_json::to_writer(&mut stream, &req);
+                         let _ = std::io::Write::flush(&mut stream);
+                     }
+                }).join();
+            }
+        });
 }

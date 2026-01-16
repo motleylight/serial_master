@@ -1,4 +1,6 @@
 use serial_master::core::serial_manager::SerialManager;
+use serial_master::core::port_sharing_manager::{PortSharingManager, SharingStatus};
+use serial_master::core::com0com_manager::Com0comManager;
 use tauri::State;
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
@@ -211,13 +213,16 @@ pub async fn set_script(state: State<'_, crate::scripting::ScriptManager>, scrip
 
 // ============== 端口共享功能 ==============
 
-use serial_master::core::com0com_manager::Com0comManager;
-use serial_master::core::port_sharing_manager::{PortSharingManager, SharingStatus};
-
 /// 检测 com0com 是否已安装
 #[tauri::command]
 pub async fn check_com0com_installed() -> bool {
     Com0comManager::is_installed()
+}
+
+/// 检测 hub4com 是否已安装
+#[tauri::command]
+pub async fn check_hub4com_installed() -> bool {
+    serial_master::core::hub4com_manager::Hub4comManager::is_installed()
 }
 
 /// 获取虚拟端口对列表
@@ -227,31 +232,99 @@ pub async fn get_virtual_pairs() -> Result<Vec<serial_master::core::com0com_mana
     manager.list_pairs().map_err(to_string_err)
 }
 
+/// 创建虚拟端口对
+#[tauri::command]
+pub async fn create_virtual_pair(mut name_a: String, name_b: String) -> Result<serial_master::core::com0com_manager::PortPair, String> {
+    let manager = Com0comManager::new().map_err(to_string_err)?;
+    
+    // Auto-name if requested
+    if name_a == "-" {
+        // Use "COM#" to invoke Ports class installer (better compatibility)
+        // This ensures the port appears in "Ports (COM & LPT)" class in Device Manager
+        name_a = "COM#".to_string();
+    }
+
+    manager.create_pair(&name_a, &name_b).map_err(to_string_err)
+}
+
+/// 移除虚拟端口对
+#[tauri::command]
+pub async fn remove_virtual_pair(pair_id: u32) -> Result<(), String> {
+    let manager = Com0comManager::new().map_err(to_string_err)?;
+    manager.remove_pair(pair_id).map_err(to_string_err)
+}
+
+/// 重命名虚拟端口对
+#[tauri::command]
+pub async fn rename_virtual_pair(pair_id: u32, name_a: String, name_b: String) -> Result<(), String> {
+    let manager = Com0comManager::new().map_err(to_string_err)?;
+    manager.rename_pair(pair_id, &name_a, &name_b).map_err(to_string_err)
+}
+
 /// 获取端口共享状态
 #[tauri::command]
 pub async fn get_sharing_status(
     state: State<'_, Mutex<PortSharingManager>>
 ) -> Result<SharingStatus, String> {
-    let manager = state.lock().await;
+    let mut manager = state.lock().await;
+    // 尝试刷新状态（检查后端 hub4com 进程）
+    let _ = manager.refresh_status(); 
     Ok(manager.get_status())
 }
 
 /// 启用端口共享模式
 #[tauri::command]
-pub async fn enable_port_sharing(
+pub async fn start_port_sharing(
     state: State<'_, Mutex<PortSharingManager>>,
-    physical_port: String
-) -> Result<String, String> {
+    serial_manager: State<'_, Mutex<SerialManager>>,
+    physical_port: String,
+    virtual_pair_ids: Vec<u32>,
+    baud_rate: Option<u32>
+) -> Result<(), String> {
+    // 1. Get Virtual Port Name & Update Status (Manager)
     let mut manager = state.lock().await;
-    manager.enable_sharing(&physical_port).map_err(to_string_err)
+    let mut v_port_name = manager.start_sharing_status_only(&physical_port, &virtual_pair_ids)
+        .map_err(to_string_err)?;
+    
+    // Fix for com0com CNC prefixes: Ensure we use UNC path if it's a raw CNC name
+    // serialport-rs usually handles this but explicit checks help avoid ambiguity
+    if v_port_name.to_uppercase().starts_with("CNC") && !v_port_name.starts_with(r"\\.\") {
+        v_port_name = format!(r"\\.\{}", v_port_name);
+    }
+
+    log::info!("Command: start_port_sharing. Physical: {}, Virtual: {}", physical_port, v_port_name);
+
+    // 2. Start Bridging inside SerialManager (Spy Mode)
+    // We do NOT disconnect the main port. We attach the spy.
+    let mut serial = serial_manager.lock().await;
+    
+    // Ensure serial port is actually open? 
+    // If not open, should we open it? 
+    // User expectation: "Our serial tool should continue connecting".
+    // Usually user opens port, then clicks share.
+    // If port is closed, `SerialManager::start_sharing` might process nothing (until opened), 
+    // but we can still enable the flag.
+    
+    serial.start_sharing(&v_port_name).map_err(to_string_err)?;
+    
+    log::info!("Port Sharing Active: {} <-> {} (Spy Mode)", physical_port, v_port_name);
+    Ok(())
 }
 
 /// 禁用端口共享模式
 #[tauri::command]
-pub async fn disable_port_sharing(
-    state: State<'_, Mutex<PortSharingManager>>
+pub async fn stop_port_sharing(
+    state: State<'_, Mutex<PortSharingManager>>,
+    serial_manager: State<'_, Mutex<SerialManager>>
 ) -> Result<(), String> {
+    // 1. Stop Bridging in SerialManager
+    {
+        let mut serial = serial_manager.lock().await;
+        serial.stop_sharing().map_err(to_string_err)?;
+    }
+
+    // 2. Update Status
     let mut manager = state.lock().await;
-    manager.disable_sharing().map_err(to_string_err)
+    manager.stop_sharing_status_only().map_err(to_string_err)
 }
 

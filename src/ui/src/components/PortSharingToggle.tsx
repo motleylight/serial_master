@@ -1,147 +1,104 @@
 import { useState, useEffect, useCallback } from "react";
 import { PortSharingService, SharingStatus } from "../services/ipc";
 import { cn } from "../lib/utils";
-import { Share2, Copy, Check, AlertTriangle, ExternalLink } from "lucide-react";
+import { Share2, Copy, Check, AlertTriangle } from "lucide-react";
 
 interface PortSharingToggleProps {
-    /** 当前连接的物理端口 */
-    physicalPort: string;
-    /** 是否已连接到串口 */
-    isConnected: boolean;
+    /** 点击回调 (打开管理弹窗) */
+    onClick: () => void;
 }
 
-export function PortSharingToggle({ physicalPort, isConnected }: PortSharingToggleProps) {
+export function PortSharingToggle({ onClick }: PortSharingToggleProps) {
     const [status, setStatus] = useState<SharingStatus>({
         enabled: false,
-        port_pair: null,
-        external_port: null
+        port_pairs: [],
+        physical_port: null
     });
-    const [isLoading, setIsLoading] = useState(false);
     const [com0comInstalled, setCom0comInstalled] = useState<boolean | null>(null);
+    const [hub4comInstalled, setHub4comInstalled] = useState<boolean | null>(null);
     const [copied, setCopied] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
-    // 检测 com0com 安装状态
+    // Check dependencies
     useEffect(() => {
         PortSharingService.isCom0comInstalled().then(setCom0comInstalled);
+        PortSharingService.isHub4comInstalled().then(setHub4comInstalled);
     }, []);
 
-    // 获取共享状态
+    // Refresh status periodically or on mount
     const refreshStatus = useCallback(async () => {
         try {
             const s = await PortSharingService.getSharingStatus();
             setStatus(s);
-            setError(null);
         } catch (e) {
-            console.error("获取共享状态失败:", e);
+            console.error(e);
         }
     }, []);
 
     useEffect(() => {
         refreshStatus();
+        const interval = setInterval(refreshStatus, 2000); // Simple polling to keep sync
+        return () => clearInterval(interval);
     }, [refreshStatus]);
 
-    // 切换共享模式
-    const toggleSharing = async () => {
-        if (!com0comInstalled) return;
-
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            if (status.enabled) {
-                await PortSharingService.disableSharing();
-            } else {
-                await PortSharingService.enableSharing(physicalPort);
-            }
-            await refreshStatus();
-        } catch (e: any) {
-            setError(e?.toString() || "操作失败");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // 复制端口名
-    const copyPortName = () => {
-        if (status.external_port) {
-            navigator.clipboard.writeText(status.external_port);
+    // Copy external port name (first one for now)
+    const copyPortName = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (status.port_pairs.length > 0) {
+            // Usually the external port is Port B of the pair
+            const portName = status.port_pairs[0].port_b;
+            navigator.clipboard.writeText(portName);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
     };
 
-    // 显示安装引导
-    if (com0comInstalled === false) {
+    // Dependencies warning
+    if (com0comInstalled === false || hub4comInstalled === false) {
         return (
-            <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded border border-amber-200 dark:border-amber-800">
+            <button
+                onClick={onClick}
+                className="flex items-center gap-1.5 px-2 py-1 h-7 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded border border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                title="Components missing, click to manage"
+            >
                 <AlertTriangle className="w-3 h-3 shrink-0" />
-                <span>端口共享需要</span>
-                <a
-                    href="https://sourceforge.net/projects/com0com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-amber-700 inline-flex items-center gap-0.5"
-                >
-                    安装 com0com
-                    <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-            </div>
-        );
+                <span>Shared Port Setup</span>
+            </button>
+        )
     }
 
-    // 加载中
-    if (com0comInstalled === null) {
-        return null;
-    }
+    if (com0comInstalled === null) return null;
 
     return (
         <div className="flex items-center gap-2">
-            {/* 共享开关按钮 */}
             <button
-                onClick={toggleSharing}
-                disabled={isLoading || !isConnected}
+                onClick={onClick}
                 className={cn(
-                    "h-7 px-2 rounded flex items-center gap-1.5 text-xs font-medium transition-colors border",
+                    "h-7 px-3 rounded flex items-center gap-1.5 text-xs font-medium transition-colors border shadow-sm",
                     status.enabled
-                        ? "bg-purple-500 hover:bg-purple-600 text-white border-purple-600"
-                        : "bg-background hover:bg-accent text-foreground border-input",
-                    (isLoading || !isConnected) && "opacity-50 cursor-not-allowed"
+                        ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-600"
+                        : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
                 )}
-                title={status.enabled ? "禁用端口共享" : "启用端口共享 (允许其他软件同时访问此端口)"}
+                title={status.enabled ? "Sharing Active - Click to Manage" : "Share Port"}
             >
-                <Share2 className={cn("w-3.5 h-3.5", isLoading && "animate-pulse")} />
+                <Share2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">
-                    {status.enabled ? "共享中" : "共享"}
+                    {status.enabled ? "Sharing" : "Share Port"}
                 </span>
             </button>
 
-            {/* 虚拟端口信息 */}
-            {status.enabled && status.external_port && (
-                <div className="flex items-center gap-1 px-2 py-1 bg-purple-50 dark:bg-purple-950/30 rounded border border-purple-200 dark:border-purple-800">
-                    <span className="text-[10px] text-purple-600 dark:text-purple-400">
-                        其他软件连接:
+            {status.enabled && status.port_pairs.length > 0 && (
+                <div className="flex items-center gap-1 px-2 py-1 h-7 bg-purple-50 border border-purple-200 rounded text-xs">
+                    <span className="text-purple-600 font-medium">
+                        {status.port_pairs.map(p => p.port_b).join(', ')}
                     </span>
-                    <code className="font-mono text-xs font-bold text-purple-700 dark:text-purple-300">
-                        {status.external_port}
-                    </code>
                     <button
                         onClick={copyPortName}
-                        className="ml-1 p-0.5 hover:bg-purple-200 dark:hover:bg-purple-800 rounded transition-colors"
-                        title="复制端口名"
+                        className="p-0.5 hover:bg-purple-100 rounded text-purple-500"
+                        title="Copy Port Name"
                     >
-                        {copied ? (
-                            <Check className="w-3 h-3 text-green-600" />
-                        ) : (
-                            <Copy className="w-3 h-3 text-purple-500" />
-                        )}
+                        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                     </button>
                 </div>
-            )}
-
-            {/* 错误提示 */}
-            {error && (
-                <span className="text-[10px] text-red-500">{error}</span>
             )}
         </div>
     );

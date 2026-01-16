@@ -10,6 +10,7 @@ import { cn } from './lib/utils';
 import { ScriptEditor } from './components/ScriptEditor';
 import { ScriptService } from './services/ScriptService';
 import { useAppConfig } from './hooks/useAppConfig';
+import { PortSharingDialog } from './components/PortSharingDialog';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -51,6 +52,7 @@ function App() {
   const [logs, setLogs] = useState<LogData[]>([]);
   const [connected, setConnected] = useState(false);
   const [showScriptEditor, setShowScriptEditor] = useState(false);
+  const [showPortSharing, setShowPortSharing] = useState(false);
 
   // Buffer for batch updates - reduces render frequency significantly
   const logBufferRef = useRef<LogData[]>([]);
@@ -242,12 +244,19 @@ function App() {
                   onOpenScripting={() => setShowScriptEditor(true)}
                   sendConfig={config.send}
                   onSendConfigChange={updateSendConfig}
+                  onOpenPortSharing={() => setShowPortSharing(true)}
                   ui={uiConfig}
                   onUiUpdate={updateUiConfig}
                 />
               </div>
 
               <ScriptEditor isOpen={showScriptEditor} onClose={() => setShowScriptEditor(false)} />
+              <PortSharingDialog
+                isOpen={showPortSharing}
+                onClose={() => setShowPortSharing(false)}
+                currentPhysicalPort={serialConfig.port_name}
+                currentBaudRate={serialConfig.baud_rate}
+              />
             </div>
 
             {/* Drag Handle */}
