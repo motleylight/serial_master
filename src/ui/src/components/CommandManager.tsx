@@ -251,13 +251,11 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                             </button>
 
                             <input
-                                className="w-24 bg-transparent border-b border-transparent hover:border-border focus:border-primary focus:outline-none px-1 py-0.5 truncate transition-colors font-medium"
+                                className="flex-1 bg-transparent border-b border-transparent hover:border-border focus:border-primary focus:outline-none px-1 py-0.5 transition-colors font-medium min-w-0"
                                 value={cmd.name}
                                 onChange={(e) => updateCommand(cmd.id, 'name', e.target.value)}
                                 placeholder="Name"
                             />
-
-                            <div className="flex-1" /> {/* Spacer */}
 
                             <HexSwitch
                                 checked={cmd.isHex}

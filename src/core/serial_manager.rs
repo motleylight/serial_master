@@ -96,12 +96,14 @@ impl SerialManager {
 
     pub fn close(&mut self) -> Result<()> {
         self.should_run.store(false, Ordering::SeqCst);
-        let _ = self.stop_sharing();
+        // Do NOT stop sharing on close. Doing so breaks the "Persistent Sharing" feature
+        // where the user expects the bridge to remain active even if the physical connection drops or is toggled.
+        // let _ = self.stop_sharing(); 
 
         let mut guard = self.port.lock().unwrap();
         if guard.is_some() {
             *guard = None;
-            info!("Closed serial port");
+            info!("Closed serial port (Sharing status: preserved)");
         }
         Ok(())
     }

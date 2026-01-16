@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { PortSharingService, SharingStatus } from "../services/ipc";
 import { cn } from "../lib/utils";
-import { Share2, Copy, Check, AlertTriangle } from "lucide-react";
+import { Share2, AlertTriangle, X } from "lucide-react";
 
 interface PortSharingToggleProps {
     /** 点击回调 (打开管理弹窗) */
@@ -16,7 +16,6 @@ export function PortSharingToggle({ onClick }: PortSharingToggleProps) {
     });
     const [com0comInstalled, setCom0comInstalled] = useState<boolean | null>(null);
     const [hub4comInstalled, setHub4comInstalled] = useState<boolean | null>(null);
-    const [copied, setCopied] = useState(false);
 
     // Check dependencies
     useEffect(() => {
@@ -40,15 +39,12 @@ export function PortSharingToggle({ onClick }: PortSharingToggleProps) {
         return () => clearInterval(interval);
     }, [refreshStatus]);
 
-    // Copy external port name (first one for now)
-    const copyPortName = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (status.port_pairs.length > 0) {
-            // Usually the external port is Port B of the pair
-            const portName = status.port_pairs[0].port_b;
-            navigator.clipboard.writeText(portName);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+    const handleStopSharing = async () => {
+        try {
+            await PortSharingService.stopSharing();
+            refreshStatus();
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -70,33 +66,49 @@ export function PortSharingToggle({ onClick }: PortSharingToggleProps) {
 
     return (
         <div className="flex items-center gap-2">
-            <button
-                onClick={onClick}
-                className={cn(
-                    "h-7 px-3 rounded flex items-center gap-1.5 text-xs font-medium transition-colors border shadow-sm",
-                    status.enabled
-                        ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-600"
-                        : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
-                )}
-                title={status.enabled ? "Sharing Active - Click to Manage" : "Share Port"}
-            >
-                <Share2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">
-                    {status.enabled ? "Sharing" : "Share Port"}
-                </span>
-            </button>
-
-            {status.enabled && status.port_pairs.length > 0 && (
-                <div className="flex items-center gap-1 px-2 py-1 h-7 bg-purple-50 border border-purple-200 rounded text-xs">
-                    <span className="text-purple-600 font-medium">
-                        {status.port_pairs.map(p => p.port_b).join(', ')}
-                    </span>
+            {!status.enabled ? (
+                <button
+                    onClick={onClick}
+                    className="h-7 px-3 rounded flex items-center gap-1.5 text-xs font-medium transition-colors border shadow-sm bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
+                    title="Share Port"
+                >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Share Port</span>
+                </button>
+            ) : (
+                <div className="flex items-center h-7 rounded border border-purple-200 bg-purple-50/50 shadow-sm overflow-hidden">
+                    {/* Label Part */}
                     <button
-                        onClick={copyPortName}
-                        className="p-0.5 hover:bg-purple-100 rounded text-purple-500"
-                        title="Copy Port Name"
+                        onClick={onClick}
+                        className="h-full px-2 text-xs font-semibold text-purple-700 hover:bg-purple-100/50 transition-colors flex items-center gap-1.5"
+                        title="Sharing Active - Click to Manage"
                     >
-                        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Sharing</span>
+                    </button>
+
+                    {/* Divider */}
+                    <div className="h-4 w-[1px] bg-purple-200/50" />
+
+                    {/* Ports Display */}
+                    <button
+                        onClick={onClick}
+                        className="h-full px-2 text-xs text-purple-600 hover:bg-purple-100/50 transition-colors flex items-center font-medium max-w-[150px] truncate"
+                        title="Manage Ports"
+                    >
+                        {status.port_pairs.length > 0 ? status.port_pairs.map(p => p.port_a).join(', ') : 'No Ports'}
+                    </button>
+
+                    {/* Divider */}
+                    <div className="h-4 w-[1px] bg-purple-200/50" />
+
+                    {/* Stop Button */}
+                    <button
+                        onClick={handleStopSharing}
+                        className="h-full px-1.5 hover:bg-red-100 text-purple-400 hover:text-red-500 transition-colors flex items-center justify-center"
+                        title="Stop Sharing"
+                    >
+                        <X className="w-3.5 h-3.5" />
                     </button>
                 </div>
             )}
