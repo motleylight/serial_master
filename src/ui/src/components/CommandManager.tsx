@@ -264,7 +264,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
 
                             <button
                                 onClick={() => handleDelete(cmd.id)}
-                                className="p-1 text-muted-foreground hover:text-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="p-1 text-muted-foreground hover:text-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                                 title="Delete"
                             >
                                 <Trash2 className="w-3.5 h-3.5" />

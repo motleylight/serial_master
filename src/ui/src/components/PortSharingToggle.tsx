@@ -89,14 +89,25 @@ export function PortSharingToggle({ onClick }: PortSharingToggleProps) {
                     {/* Divider */}
                     <div className="h-4 w-[1px] bg-purple-200/50" />
 
-                    {/* Ports Display */}
-                    <button
+                    {/* Ports Display (Stacked like Scripts) */}
+                    <div
+                        className="flex flex-col justify-center h-full px-1 gap-[1px] min-w-[50px] items-center cursor-pointer hover:bg-purple-100/50"
                         onClick={onClick}
-                        className="h-full px-2 text-xs text-purple-600 hover:bg-purple-100/50 transition-colors flex items-center font-medium max-w-[150px] truncate"
-                        title="Manage Ports"
+                        title={status.port_pairs.map(p => `${p.port_a} <-> ${p.port_b}`).join('\n')}
                     >
-                        {status.port_pairs.length > 0 ? status.port_pairs.map(p => p.port_a).join(', ') : 'No Ports'}
-                    </button>
+                        {status.port_pairs.length > 0 ? (
+                            status.port_pairs.map((p, idx) => (
+                                <span
+                                    key={idx}
+                                    className="text-[9px] font-bold px-1.5 rounded-sm leading-none py-[1px] bg-purple-100 text-purple-700 truncate max-w-[80px]"
+                                >
+                                    {p.port_a}
+                                </span>
+                            ))
+                        ) : (
+                            <span className="text-[9px] text-purple-400 font-medium">No Ports</span>
+                        )}
+                    </div>
 
                     {/* Divider */}
                     <div className="h-4 w-[1px] bg-purple-200/50" />

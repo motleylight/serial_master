@@ -109,7 +109,7 @@ pub async fn get_ports() -> Result<Vec<PortInfo>, String> {
     let mut ports: Vec<PortInfo> = serialport::available_ports()
         .map_err(|e: serialport::Error| e.to_string())?
         .into_iter()
-        .filter(|p| !p.port_name.to_lowercase().starts_with("cnc"))
+        //.filter(|p| !p.port_name.to_lowercase().starts_with("cnc")) // Filter removed to allow CNC ports
         .map(|p| {
             // Try to get name from Windows WMI first (matches Device Manager)
             let wmi_name = friendly_names.get(&p.port_name).cloned();
@@ -142,8 +142,18 @@ pub async fn get_ports() -> Result<Vec<PortInfo>, String> {
         })
         .collect();
     
-    // Natural Sort (e.g., COM9 before COM10)
+    // Natural Sort (e.g., COM9 before COM10), with standard COM ports first
     ports.sort_by(|a, b| {
+        let is_com_a = a.port_name.to_uppercase().starts_with("COM");
+        let is_com_b = b.port_name.to_uppercase().starts_with("COM");
+
+        if is_com_a && !is_com_b {
+            return std::cmp::Ordering::Less;
+        } else if !is_com_a && is_com_b {
+            return std::cmp::Ordering::Greater;
+        }
+
+        // Both are same category (both COM or both non-COM), use natural sort
         // Extract numeric part if possible
         let extract_num = |s: &str| -> Option<u32> {
             s.chars()

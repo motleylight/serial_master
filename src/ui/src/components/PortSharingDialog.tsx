@@ -4,7 +4,7 @@ import { cn } from '../lib/utils';
 import {
     X, Activity, Trash2, Edit2, Check, Plus,
     Share2, AlertTriangle, Monitor, Cable,
-    RefreshCw, Zap
+    RefreshCw, Zap, ArrowRight, ArrowLeftRight
 } from "lucide-react";
 // We keep the CSS import if there are global styles or animations we missed, 
 // but currently it should be mostly handled by Tailwind.
@@ -312,133 +312,154 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
         const activePairs = pairs.filter(p => selectedPairIds.includes(p.pair_id));
         const isSharing = status?.enabled;
 
-        // Colors
-        const activeColorBg = isSharing ? "bg-green-500" : "bg-muted-foreground/30";
-        const strokeColor = isSharing ? "#22c55e" : "#e5e7eb"; // green-500 vs gray-200
+        // Styles
+        const containerClass = cn("border rounded-xl p-4 flex flex-col gap-3 relative transition-all bg-white/50",
+            isSharing ? "border-primary/50 bg-primary/5" : "border-border border-dashed"
+        );
+        const appBoxClass = cn("border border-dashed rounded-xl p-3 flex flex-col justify-center items-center gap-2 bg-white/50 h-24 min-w-[140px] relative transition-all",
+            isSharing ? "border-green-500/50 bg-green-500/5" : "border-border"
+        );
 
         if (activePairs.length === 0) {
             return (
-                <div className="w-full h-full flex items-center justify-center p-8 bg-muted/5 rounded-lg border border-border">
-                    <div className="flex flex-col items-center justify-center text-muted-foreground/50 text-center gap-2">
-                        <Cable className="w-8 h-8 opacity-20" />
-                        <span className="text-sm">Please select clone ports to view topology</span>
-                    </div>
+                <div className="w-full h-full flex items-center justify-center p-8 bg-muted/5 rounded-lg border border-border text-muted-foreground flex-col gap-3">
+                    <Cable className="w-10 h-10 opacity-20" />
+                    <span>Select clone ports to view topology</span>
                 </div>
             );
         }
 
         return (
-            <div className="w-full h-full p-6 overflow-auto bg-white/50 flex items-center justify-center">
-                <div className="flex items-stretch gap-0 relative">
-
-                    {/* LEFT: Physical Port (Vertically Centered) */}
-                    <div className="flex flex-col justify-center z-20">
-                        <div className={cn("w-36 h-20 border rounded-lg bg-white flex flex-col items-center justify-center shadow-sm relative transition-all",
-                            isSharing ? "border-green-500 shadow-green-500/10" : "border-muted-foreground/30"
-                        )}>
-                            <div className="font-bold font-mono text-sm mb-1">{physicalDetails.name}</div>
-                            <div className="text-[10px] text-muted-foreground text-center px-2 leading-tight">{physicalDetails.desc}</div>
-                            {/* Connector Dot Right */}
-                            <div className={cn("absolute -right-1.5 w-3 h-3 rounded-full border-2 border-white", activeColorBg, "top-1/2 -translate-y-1/2")} />
-                        </div>
-                    </div>
-
-                    {/* MIDDLE: SVG Branching Area */}
-                    <div className="w-24 relative shrink-0 flex items-center justify-center">
-                        {/* SerialMaster Badge - Matched Style to com0com */}
-                        <div className="absolute z-30 bg-white border px-1.5 py-0.5 rounded text-[9px] font-mono shadow-sm whitespace-nowrap"
-                            style={{
-                                borderColor: isSharing ? '#22c55e' : '#e5e7eb', // green-500 : border
-                                color: isSharing ? '#15803d' : '#6b7280', // green-700 : muted-foreground
-                            }}
-                        >
+            <div className="w-full h-full p-8 overflow-auto flex items-center justify-center bg-muted/5">
+                <div className="flex items-start justify-center gap-0 min-w-[800px]">
+                    {/* LEFT: SerialMaster Container (Horizontal Layout) */}
+                    <div className={cn(containerClass, "flex-row items-center gap-0 pr-0 min-w-0")}>
+                        <div className="absolute -top-3 left-4 bg-background px-2 text-xs font-bold text-muted-foreground flex items-center gap-1 border border-border rounded-full shadow-sm z-30">
+                            <Zap className="w-3 h-3 fill-current" />
                             SerialMaster
                         </div>
 
-                        {/* SVG Connections */}
-                        <svg
-                            className="absolute inset-0 w-full h-full pointer-events-none"
-                            style={{ overflow: 'visible' }}
-                            viewBox="0 0 100 100"
-                            preserveAspectRatio="none"
-                        >
-                            {activePairs.map((_, idx) => {
-                                const total = activePairs.length;
-                                // To draw accurately, we assume evenly spaced targets on the right.
-                                // Let's rely on CSS flex alignment. 
-                                // We can't easily know exact pixel positions without ref.
-                                // SIMPLE TRICK: Use 0-100% logic, assuming the container height matches the right side height perfectly.
-                                // Left side is centered.
+                        {/* 1. Physical Port (Left) */}
+                        <div className="flex flex-col justify-center z-20">
+                            <div className={cn("w-32 min-h-[4rem] border rounded bg-background flex flex-col items-center justify-center shadow-sm text-center relative z-10 py-1",
+                                isSharing ? "border-primary shadow-primary/20" : "border-border"
+                            )}>
+                                <span className="text-sm font-mono">{physicalDetails.name}</span>
+                                <span className="text-[9px] text-muted-foreground w-full px-1 leading-tight break-words">{physicalDetails.desc}</span>
+                                {/* Dot Right */}
+                                <div className={cn("absolute -right-1 w-2 h-2 rounded-full border border-white top-1/2 -translate-y-1/2", isSharing ? "bg-primary" : "bg-muted")} />
+                            </div>
+                        </div>
 
-                                const step = 100 / total;
-                                const yTarget = (step * idx) + (step / 2);
+                        {/* 2. Link Physical -> Bridge */}
+                        <div className={cn("w-16 h-[2px] relative flex items-center justify-center", isSharing ? "bg-primary" : "bg-border")}>
+                            {isSharing && <ArrowRight className="w-3 h-3 text-primary absolute -top-4" />}
+                        </div>
 
-                                return (
-                                    <g key={idx}>
-                                        {/* Curve from Left-Center to Right-Target */}
-                                        <path
-                                            d={`M 0,50 C 50,50 50,${yTarget} 100,${yTarget}`}
-                                            fill="none"
-                                            stroke={strokeColor}
-                                            strokeWidth="2"
-                                            vectorEffect="non-scaling-stroke"
-                                        />
-                                        {/* "Transparent" Label on the path? Hard to center. 
-                                            Fixed "Trans" label on the line is cleaner in the middle div.
-                                        */}
-                                    </g>
-                                );
-                            })}
-                        </svg>
-                    </div>
-
-                    {/* RIGHT: Virtual Rows */}
-                    <div className="flex flex-col gap-4 py-4 z-20">
-                        {activePairs.map(pair => (
-                            <div key={pair.pair_id} className="flex items-center gap-3 h-20">
-                                {/* Virtual A */}
-                                <div className={cn("w-32 h-14 border rounded bg-white flex flex-col items-center justify-center shadow-sm text-sm font-mono relative",
-                                    isSharing ? "border-blue-500 shadow-blue-500/10" : "border-muted-foreground/30"
-                                )}>
-                                    {pair.port_a}
-                                    <span className="text-[9px] text-muted-foreground font-sans">Virtual Clone</span>
-                                    {/* Dot Left */}
-                                    <div className={cn("absolute -left-1.5 w-3 h-3 rounded-full border-2 border-white", isSharing ? "bg-blue-500" : "bg-muted-foreground/30", "top-1/2 -translate-y-1/2")} />
+                        {/* 3. Bridge Node (Center) */}
+                        <div className="relative flex flex-col items-center justify-center z-20">
+                            <div className={cn("px-4 py-1.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 shadow-sm bg-background relative z-10",
+                                isSharing ? "border-primary text-primary shadow-primary/10 ring-2 ring-primary/5" : "border-border text-muted-foreground"
+                            )}>
+                                <RefreshCw className={cn("w-3 h-3", isSharing && "text-primary animate-spin-slow")} />
+                                <span>Bridge</span>
+                            </div>
+                            {/* Pass-through Label (Above Bridge) */}
+                            {isSharing && (
+                                <div className="absolute -top-8 whitespace-nowrap text-[9px] text-primary font-medium bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                    Pass-through
                                 </div>
+                            )}
+                        </div>
 
-                                {/* Link: com0com */}
-                                <div className="w-20 h-[2px] bg-border relative flex items-center justify-center">
-                                    <div className={cn("absolute inset-0", isSharing && "bg-blue-500 animate-pulse")} />
-                                    <div className={cn("bg-white border px-1.5 py-0.5 rounded text-[9px] font-mono shadow-sm relative z-10",
-                                        isSharing ? "border-blue-500 text-blue-700" : "text-muted-foreground"
+                        {/* 4. Link Bridge -> Virtual List Wrapper */}
+                        <div className={cn("w-16 h-[2px] relative flex items-center justify-center", isSharing ? "bg-primary" : "bg-border")}>
+                            {isSharing && <ArrowRight className="w-3 h-3 text-primary absolute -top-4" />}
+                        </div>
+
+                        {/* 5. Virtual Ports List (Right side of Box) */}
+                        <div className="flex flex-col gap-6 relative">
+                            {/* Spine Component for multiple items */}
+                            {activePairs.length > 1 && (
+                                <div className={cn("absolute left-[-2px] w-[2px]", isSharing ? "bg-primary" : "bg-border")}
+                                    style={{
+                                        top: '3rem', // Center of first item (h-24/2 = 3rem)
+                                        bottom: '3rem' // Center of last item
+                                    }}
+                                />
+                            )}
+
+                            {activePairs.map((pair) => (
+                                <div key={pair.pair_id} className="h-24 flex items-center relative pl-4">
+                                    {/* Horizontal Branch from Spine to Item */}
+                                    <div className={cn("absolute left-[-2px] w-4 h-[2px]",
+                                        isSharing ? "bg-primary" : "bg-border"
+                                    )}
+                                        style={{ top: '50%' }}
+                                    />
+
+                                    {/* Virtual A Box */}
+                                    <div className={cn("w-32 h-14 border rounded bg-background flex flex-col items-center justify-center shadow-sm text-sm font-mono relative z-10",
+                                        isSharing ? "border-purple-400 shadow-purple-500/20" : "border-border"
                                     )}>
-                                        com0com
+                                        {pair.port_a}
+                                        <span className="text-[9px] text-muted-foreground bg-muted/30 px-1 rounded mt-0.5">Virtual</span>
+                                        {/* Connector Left (Input) */}
+                                        <div className={cn("absolute -left-1 w-2 h-2 rounded-full border border-white top-1/2 -translate-y-1/2", isSharing ? "bg-purple-500" : "bg-muted")} />
+
+                                        {/* Connector Right (Output to com0com) */}
+                                        <div className={cn("absolute -right-1.5 w-3 h-3 rounded-full border-2 border-white top-1/2 -translate-y-1/2", isSharing ? "bg-purple-500" : "bg-muted")} />
                                     </div>
                                 </div>
+                            ))}
+                        </div>
+                    </div>
 
-                                {/* Virtual B */}
-                                <div className={cn("w-32 h-14 border rounded bg-white flex flex-col items-center justify-center shadow-sm text-sm font-mono relative",
-                                    isSharing ? "border-blue-500 shadow-blue-500/10" : "border-muted-foreground/30"
+                    {/* MIDDLE: com0com Links */}
+                    <div className="flex flex-col gap-6 relative w-32 pt-4 shrink-0">
+                        {activePairs.map((pair) => (
+                            <div key={pair.pair_id} className="h-24 relative flex items-center justify-center">
+                                {/* Cable Line - positioned to bridge left gap */}
+                                {/* left-[-24px] bridges the gap into SerialMaster (p-4 = 16px + buffer) */}
+                                <div className={cn("absolute h-[2px] top-1/2 -translate-y-1/2",
+                                    isSharing ? "bg-purple-500/50" : "bg-border",
+                                    "-left-6 w-[calc(100%+24px)]"
                                 )}>
-                                    {pair.port_b}
-                                    <span className="text-[9px] text-muted-foreground font-sans">Virtual Clone</span>
-                                </div>
+                                    {isSharing && <div className="absolute inset-0 bg-purple-400 animate-pulse opacity-50" />}
 
-                                {/* Link: App (Direct Connection) */}
-                                <div className="w-12 h-[2px] bg-border relative flex items-center justify-center">
-                                    <div className={cn("absolute inset-0", isSharing && "bg-green-500 animate-pulse")} />
-                                    {/* Removed "Trans" label */}
-                                </div>
-
-                                {/* App Node */}
-                                <div className="w-28 h-14 border border-dashed border-green-500/40 bg-green-50/30 rounded flex flex-col items-center justify-center text-xs text-green-700 relative">
-                                    <div className="font-semibold">3rd Party App</div>
-                                    <div className="text-[9px] opacity-70">Application</div>
+                                    {/* com0com Badge - Centered on the line */}
+                                    <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-10 bg-background px-2 py-1 rounded-full border border-border shadow-sm flex items-center gap-1.5">
+                                        <ArrowLeftRight className={cn("w-3 h-3", isSharing ? "text-purple-500" : "text-muted-foreground")} />
+                                        <span className="text-[10px] font-mono text-muted-foreground font-medium">com0com</span>
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
 
+                    {/* RIGHT: App Containers (Occupies Virtual B) */}
+                    <div className="flex flex-col gap-6 pt-4 pl-4">
+                        {activePairs.map((pair) => (
+                            <div key={pair.pair_id} className={appBoxClass}>
+                                <div className={cn("absolute -top-3 left-4 bg-background px-2 text-xs font-bold flex items-center gap-1 border border-border rounded-full shadow-sm z-30",
+                                    isSharing ? "border-green-200" : "text-muted-foreground"
+                                )} style={{ color: isSharing ? '#000000' : undefined }}>
+                                    <Monitor className="w-3 h-3 fill-current" />
+                                    3rd Party App
+                                </div>
+
+                                {/* Virtual B Box */}
+                                <div className={cn("w-32 h-14 border rounded bg-background flex flex-col items-center justify-center shadow-sm text-sm font-mono relative z-10",
+                                    isSharing ? "border-green-500 shadow-green-500/20" : "border-border"
+                                )}>
+                                    {pair.port_b}
+                                    <span className="text-[9px] text-muted-foreground">Virtual</span>
+                                    {/* Connector Left */}
+                                    <div className={cn("absolute -left-1.5 w-3 h-3 rounded-full border-2 border-white top-1/2 -translate-y-1/2", isSharing ? "bg-green-500" : "bg-muted")} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
         );
@@ -523,7 +544,7 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
                     )}
 
                     {activeTab === 'share' ? (
-                        <div className="h-full flex flex-col gap-6">
+                        <div className="flex-1 min-h-0 flex flex-col gap-6">
                             {/* Source Port Section */}
                             <div className="flex flex-col gap-2">
                                 <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider text-[10px]">Source Physical Port</label>
