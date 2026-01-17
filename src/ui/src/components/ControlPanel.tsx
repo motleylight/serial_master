@@ -1,7 +1,7 @@
 import { useState, useEffect, KeyboardEvent, useRef } from "react";
 import { SerialService, SerialConfig, SerialPortInfo } from "../services/ipc";
 import { cn } from "../lib/utils";
-import { RefreshCw, Link, Link2Off, Send, ChevronDown, X, Timer } from "lucide-react";
+import { RefreshCw, Link, Link2Off, Send, ChevronDown, X } from "lucide-react";
 import { HexSwitch } from "./ui/HexSwitch";
 import { PortSelect } from "./ui/PortSelect";
 import { PortSharingToggle } from "./PortSharingToggle";
@@ -303,7 +303,7 @@ export function ControlPanel({
                                 setShowConfig(!showConfig);
                             }}
                             className="h-7 px-2 rounded border border-input bg-background hover:bg-accent flex items-center gap-1 text-xs font-mono"
-                            title="Serial Configuration (Data Bits / Stop Bits / Parity)"
+                            title="Serial Configuration (Data Bits, Parity, Timeout)"
                         >
                             {config.data_bits}
                             {config.parity === 'None' ? 'N' : config.parity.charAt(0)}
@@ -353,26 +353,21 @@ export function ControlPanel({
                                         <option value="Odd">Odd</option>
                                         <option value="Even">Even</option>
                                     </select>
+
+                                    <label className="text-[10px] text-muted-foreground font-medium" title="Frame break timeout in milliseconds">Break (ms)</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            className="h-7 w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                                            value={config.timeout || 10}
+                                            min={1}
+                                            max={1000}
+                                            onChange={(e) => handleChange("timeout", parseInt(e.target.value) || 10)}
+                                        />
+                                    </div>
                                 </div>
                             </>
                         )}
-                    </div>
-
-                    {/* Frame Break Timeout (Independent Setting) */}
-                    <div className="flex items-center h-7 rounded border border-input bg-background px-1.5 gap-1 mx-1 flex-shrink-0" title="Automatic Frame Break Timeout: If no data is received for this duration, the current buffer is flushed as a new line.">
-                        <Timer className="w-3.5 h-3.5 text-muted-foreground/70" />
-                        <div className="flex items-center gap-0.5">
-                            <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap hidden lg:inline">Break:</span>
-                            <input
-                                type="number"
-                                className="w-8 text-xs bg-transparent border-none focus:outline-none p-0 text-center font-mono h-full"
-                                value={config.timeout || 10}
-                                min={1}
-                                max={1000}
-                                onChange={(e) => handleChange("timeout", parseInt(e.target.value) || 10)}
-                            />
-                            <span className="text-[10px] text-muted-foreground font-medium">ms</span>
-                        </div>
                     </div>
 
                     {/* Port Sharing Toggle */}
