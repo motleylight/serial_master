@@ -650,62 +650,71 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
         <div className="flex flex-col h-full w-full">
             {/* Toolbar - Grid Layout for Strict Alignment */}
             <div className="border-b border-border bg-muted">
-                {/* Row 1: Main Controls */}
-                <div className="grid grid-cols-[auto_110px_1fr_auto_auto] items-center px-2 py-1 gap-2">
-                    {/* COL 1: LEFT CONTROLS (Auto width) */}
-                    <div className="flex items-center gap-1 justify-start">
-                        <button onClick={onClear} className="p-1 hover:bg-black/10 rounded" title="Clear Output">
-                            <Trash2 className="w-4 h-4 text-muted-foreground" />
-                        </button>
-                        {setLogs && (
-                            <button onClick={handleLoadLog} className="p-1 hover:bg-black/10 rounded" title="Load Log">
-                                <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                {/* Single Grid Container for both rows - columns are shared */}
+                <div
+                    className="grid items-center px-2 py-1 gap-x-2 gap-y-1"
+                    style={{
+                        gridTemplateColumns: 'minmax(0,1fr) minmax(240px,1fr) auto minmax(0,130px)',
+                        gridTemplateRows: showReplace ? 'auto auto' : 'auto'
+                    }}
+                >
+                    {/* ROW 1: Main Controls */}
+                    {/* COL 1: LEFT CONTROLS + SEARCH/FILTER TOGGLE */}
+                    <div className="flex items-center gap-2 justify-start overflow-hidden">
+                        <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={onClear} className="shrink-0 p-1 hover:bg-black/10 rounded" title="Clear Output">
+                                <Trash2 className="w-4 h-4 text-muted-foreground" />
                             </button>
-                        )}
-                        <button onClick={handleSaveLog} className="p-1 hover:bg-black/10 rounded" title="Save Log">
-                            <SaveIcon className="w-4 h-4 text-muted-foreground" />
-                        </button>
-
-                        <div className="h-4 w-[1px] bg-border mx-1" />
-
-                        <button
-                            onClick={() => setShowMetadata(!showMetadata)}
-                            className={cn(
-                                "px-2 py-0.5 rounded text-[10px] font-medium border border-transparent transition-colors whitespace-nowrap",
-                                showMetadata ? "bg-primary/10 text-primary border-primary/20" : "text-muted-foreground hover:bg-black/5"
+                            {setLogs && (
+                                <button onClick={handleLoadLog} className="shrink-0 p-1 hover:bg-black/10 rounded" title="Load Log">
+                                    <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                                </button>
                             )}
-                            title="Toggle Timestamp & Info & SYS messages"
-                        >
-                            Info
-                        </button>
+                            <button onClick={handleSaveLog} className="shrink-0 p-1 hover:bg-black/10 rounded" title="Save Log">
+                                <SaveIcon className="w-4 h-4 text-muted-foreground" />
+                            </button>
 
-                        <div className="h-4 w-[1px] bg-border mx-1" />
-                    </div>
+                            <div className="shrink-0 h-4 w-[1px] bg-border mx-1" />
 
-                    {/* COL 2: TOGGLE (Fixed 110px) */}
-                    <div className="flex rounded-md border border-input overflow-hidden w-full">
-                        <button
-                            onClick={() => setSearchMode('search')}
-                            disabled={viewMode === 'HEX'}
-                            className={cn(
-                                "flex-1 px-0 py-1 text-xs font-medium transition-colors text-center",
-                                "disabled:opacity-50 disabled:cursor-not-allowed",
-                                searchMode === 'search' ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                            )}
-                        >
-                            Search
-                        </button>
-                        <button
-                            onClick={() => setSearchMode('filter')}
-                            disabled={viewMode === 'HEX'}
-                            className={cn(
-                                "flex-1 px-0 py-1 text-xs font-medium transition-colors border-l border-input text-center",
-                                "disabled:opacity-50 disabled:cursor-not-allowed",
-                                searchMode === 'filter' ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                            )}
-                        >
-                            Filter
-                        </button>
+                            <button
+                                onClick={() => setShowMetadata(!showMetadata)}
+                                className={cn(
+                                    "shrink-0 px-2 py-0.5 rounded text-[10px] font-medium border border-transparent transition-colors whitespace-nowrap",
+                                    showMetadata ? "bg-primary/10 text-primary border-primary/20" : "text-muted-foreground hover:bg-black/5"
+                                )}
+                                title="Toggle Timestamp & Info & SYS messages"
+                            >
+                                Info
+                            </button>
+
+                            <div className="shrink-0 h-4 w-[1px] bg-border mx-1" />
+                        </div>
+
+                        {/* SEARCH/FILTER TOGGLE (Fixed 110px, can be clipped) */}
+                        <div className="flex rounded-md border border-input overflow-hidden shrink-0 w-[110px]">
+                            <button
+                                onClick={() => setSearchMode('search')}
+                                disabled={viewMode === 'HEX'}
+                                className={cn(
+                                    "flex-1 px-0 py-1 text-xs font-medium transition-colors text-center",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    searchMode === 'search' ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                                )}
+                            >
+                                Search
+                            </button>
+                            <button
+                                onClick={() => setSearchMode('filter')}
+                                disabled={viewMode === 'HEX'}
+                                className={cn(
+                                    "flex-1 px-0 py-1 text-xs font-medium transition-colors border-l border-input text-center",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    searchMode === 'filter' ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                                )}
+                            >
+                                Filter
+                            </button>
+                        </div>
                     </div>
 
                     {/* COL 3: SEARCH INPUT (Flex 1fr) */}
@@ -769,8 +778,8 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                         </div>
                     </div>
 
-                    {/* COL 4: INFO / NAV (Auto width to remove fixed gap) */}
-                    <div className="flex items-center gap-2 justify-start overflow-hidden w-auto">
+                    {/* COL 4: INFO / NAV (Can shrink) */}
+                    <div className="flex items-center gap-2 justify-start overflow-hidden">
                         {/* Match Count */}
                         {searchText && (
                             <span className={cn(
@@ -812,8 +821,8 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                         )}
                     </div>
 
-                    {/* COL 5: RIGHT CONTROLS (Auto) */}
-                    <div className="flex items-center gap-2 justify-end w-auto">
+                    {/* COL 5: RIGHT CONTROLS (Can shrink) */}
+                    <div className="flex items-center gap-2 justify-end overflow-hidden">
                         <div className="h-4 w-[1px] bg-border mx-1" />
                         <div className="flex gap-1">
                             <button
@@ -853,46 +862,45 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                             </button>
                         </div>
                     </div>
+
+                    {/* ROW 2: Advanced Options (Replace) - Only when showReplace is true */}
+                    {showReplace && (
+                        <>
+                            {/* COL 1: Empty placeholder */}
+                            <div className="bg-muted/50 -mx-2 px-2" />
+
+                            {/* COL 2: REPLACE INPUT + CTX (same column as search, shared width) */}
+                            <div className="bg-muted/50 flex items-center gap-2">
+                                <div className="relative flex-1 min-w-0">
+                                    <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
+                                    <input
+                                        type="text"
+                                        disabled={viewMode === 'HEX' || searchMode !== 'filter'}
+                                        placeholder={searchMode !== 'filter' ? "Filter mode only" : "Replace with..."}
+                                        className="w-full h-7 pl-7 pr-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                        value={replaceText}
+                                        onChange={e => setReplaceText(e.target.value)}
+                                    />
+                                </div>
+                                <span className="shrink-0 text-xs font-medium text-muted-foreground whitespace-nowrap" title="Context lines">Ctx:</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="50"
+                                    disabled={searchMode !== 'filter'}
+                                    className="shrink-0 w-10 h-7 px-1 text-xs text-center rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                                    value={contextLines || ''}
+                                    onChange={e => setContextLines(parseInt(e.target.value) || 0)}
+                                    title="Number of context lines"
+                                />
+                            </div>
+
+                            {/* COL 3-4: Empty placeholders with background */}
+                            <div className="bg-muted/50" />
+                            <div className="bg-muted/50 -mx-2 px-2" />
+                        </>
+                    )}
                 </div>
-
-                {/* Row 2: Advanced Options (Replace) - Inherit same Grid Columns */}
-                {showReplace && (
-                    <div className="grid grid-cols-[180px_110px_1fr_auto_auto] items-center px-2 py-1 gap-2 bg-muted/50 border-t border-border/50">
-                        {/* COL 1 & 2: Empty Spacers */}
-                        <div className="col-span-2" />
-
-                        {/* COL 3: REPLACE INPUT (Matches Search Input 1fr) */}
-                        <div className="relative w-full">
-                            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
-                            <input
-                                type="text"
-                                disabled={viewMode === 'HEX' || searchMode !== 'filter'}
-                                placeholder={searchMode !== 'filter' ? "Filter mode only" : "Replace with..."}
-                                className="w-full h-7 pl-7 pr-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
-                                value={replaceText}
-                                onChange={e => setReplaceText(e.target.value)}
-                            />
-                        </div>
-
-                        {/* COL 4: CTX (Auto, Justify Start) */}
-                        <div className="flex items-center gap-2 justify-start w-auto">
-                            <span className="text-xs font-medium text-muted-foreground" title="Context lines">Ctx:</span>
-                            <input
-                                type="number"
-                                min="0"
-                                max="50"
-                                disabled={searchMode !== 'filter'}
-                                className="w-12 h-7 px-1 text-xs text-center rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
-                                value={contextLines || ''}
-                                onChange={e => setContextLines(parseInt(e.target.value) || 0)}
-                                title="Number of context lines"
-                            />
-                        </div>
-
-                        {/* COL 5: Empty */}
-                        <div />
-                    </div>
-                )}
             </div>
 
             {/* Virtualized List */}

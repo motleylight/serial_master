@@ -1,171 +1,306 @@
 # 脚本功能使用指南
 
-SerialMaster 在 Phase 2 引入了强大的可编程脚本系统，基于 `RustPython` 引擎。该系统允许用户使用 Python 语法 hook 串口数据流，从而实现动态的数据修改和自定义协议处理。
+SerialMaster 提供了强大的脚本扩展能力，允许用户通过自定义脚本对串口收发数据进行处理。
 
-## 1. 概览
-脚本系统目前支持 **Tx Hook** (发送前处理) 和 **Rx Hook** (接收过滤)。
-用户可以在发送数据之前，通过 Python 脚本拦截并修改数据。这对于添加校验和 (CRC/Checksum)、动态添加包头包尾、或者根据算法加密数据非常有用。
+## 1. 概述
 
-**核心特性:**
-- **语言**: Python 3 (通过 RustPython 嵌入式引擎)
-- **触发时机**: 点击“发送”按钮后，数据实际写入串口之前。
-- **环境**: 独立的 Python 虚拟机环境。
+脚本系统支持两种执行模式和两个挂载点（Hook）：
+
+| 挂载点 | 说明 |
+|--------|------|
+| **TX Hook** | 在数据发送到串口**之前**执行 |
+| **RX Hook** | 在从串口接收数据**之后**执行 |
+
+| 执行模式 | 执行位置 | 说明 |
+|----------|----------|------|
+| **JavaScript** | 前端 (浏览器) | 使用 `new Function()` 执行，无需任何外部依赖 |
+| **External** | 后端 (Rust) | 调用外部程序，通过 stdin/stdout 传递数据 |
+
+---
 
 ## 2. 如何使用
 
-1.  **打开编辑器**:
-    - 在连接控制栏 (Control Panel) 的右侧，点击蓝色的 **"Scripting"** 按钮。
-2.  **编写脚本**:
-    - 在弹出的编辑器中，选择 **"Tx Hook"** 标签页。
-    - 输入 Python 代码。
-3.  **保存与应用**:
-    - **Apply**: 点击 "Apply" 按钮，将当前脚本加载到后台引擎中生效（内存中，重启重置）。
-    - **Save to File**: 点击 "Save to File" (下载图标)，将脚本保存为 `.py` 文件到本地。
-    - **Open File**: 点击 "Open File" (文件夹图标)，加载本地 `.py` 脚本。
-4.  **模板 (Templates)**:
-    - 使用编辑器左上角的下拉菜单，快速加载常用脚本模板 (如 CRC16, 过滤等)。
+### 2.1 打开脚本编辑器
 
-## 3. Tx Hook 详解 (Pre-send Hook)
+1. 在控制面板工具栏找到 **"Script"** 按钮
+2. 点击打开脚本编辑器弹窗
 
-### 上下文变量
-- `data`: 这是一个此时此刻准备发送的字节列表 (`list` of `int`, 0-255)。
+### 2.2 配置脚本
 
-### 你的任务
-- 修改 `data` 变量。你可以直接修改它 (in-place modification) 或者将新的列表赋值给 `data`。
-- 系统会自动读取脚本执行后的 `data` 变量，并将其作为最终数据发送到串口。
+1. 在编辑器中选择 **TX** 或 **RX** 标签页
+2. 选择脚本类型：
+   - **JS** - JavaScript 脚本（推荐，零配置）
+   - **External** - 外部程序命令
+3. 在编辑区域输入脚本内容或命令
+4. 点击 **"Run"** 按钮启用脚本
 
-### 示例代码
+### 2.3 脚本状态指示
 
-#### 示例 1: 追加简单的后缀 (如换行符)
-```python
-# 给因为某些原因不能在UI设置换行的场景
-# 0x0A is '\n'
-data.append(0x0A)
+当脚本激活时：
+- **"Script"** 按钮变为**蓝色胶囊状态**
+- 胶囊中间显示当前运行的 Hook 类型（`TX`、`RX` 或两者都有）
+- 点击胶囊最右侧的 **"×"** 按钮可快速停止所有脚本
+
+---
+
+## 3. JavaScript 脚本
+
+JavaScript 脚本直接在前端浏览器环境中执行，具有最低延迟和最简单的配置。
+
+### 3.1 上下文变量
+
+脚本可以访问一个名为 `data` 的变量：
+
+```javascript
+// data 是一个字节数组 (number[])，每个元素是 0-255 的整数
+// 例如：[72, 101, 108, 108, 111] 对应 "Hello"
 ```
 
-#### 示例 2: 添加包头和包尾
-```python
-# 假设协议是: [HEADER 0xAA 0x55] [DATA] [FOOTER 0xFF]
-header = [0xAA, 0x55]
-footer = [0xFF]
+### 3.2 脚本规则
 
-# 重新组合 data
-data = header + data + footer
+- **直接修改 `data`**：脚本执行后，系统读取 `data` 的最终状态
+- **返回新数组**：脚本也可以返回一个新数组作为处理结果
+- **TX Hook**：修改后的 `data` 会被发送到串口
+- **RX Hook**：
+  - 修改后的 `data` 会显示在终端
+  - 返回空数组 `[]` 或 `null` 将丢弃该包（不显示）
+
+### 3.3 示例代码
+
+#### TX Hook：添加校验和
+
+```javascript
+// 计算所有字节的和（取低8位），追加到数据末尾
+const sum = data.reduce((a, b) => a + b, 0) & 0xFF;
+data.push(sum);
 ```
 
-#### 示例 3: 计算简单的校验和 (Checksum)
-```python
-# 计算所有字节的和 (取低8位)
-checksum = 0
-for byte in data:
-    checksum = (checksum + byte) & 0xFF
+#### TX Hook：添加包头包尾
 
-data.append(checksum)
+```javascript
+// 协议：[0xAA] [0x55] [数据] [0xFF]
+const header = [0xAA, 0x55];
+const footer = [0xFF];
+return [...header, ...data, ...footer];
 ```
 
-#### 示例 4: 数据加密 (简单的 XOR)
-```python
-# 对每个字节进行异或 0x55
-for i in range(len(data)):
-    data[i] = data[i] ^ 0x55
+#### TX Hook：CRC16-Modbus
+
+```javascript
+// CRC16-Modbus 计算（低字节在前）
+let crc = 0xFFFF;
+for (let byte of data) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i++) {
+        if (crc & 1) {
+            crc = (crc >> 1) ^ 0xA001;
+        } else {
+            crc >>= 1;
+        }
+    }
+}
+data.push(crc & 0xFF);         // 低字节
+data.push((crc >> 8) & 0xFF);  // 高字节
 ```
 
-#### 示例 5: CRC16-Modbus 校验
-用于工业场景常见的 Modbus 协议。
-```python
-# Pure Python Implementation of CRC16-Modbus
-# Poly: 0xA001 (Reversed 0x8005), Init: 0xFFFF
-crc = 0xFFFF
-for byte in data:
-    crc ^= byte
-    for _ in range(8):
-        if crc & 1:
-            crc = (crc >> 1) ^ 0xA001
-        else:
-            crc >>= 1
+#### RX Hook：过滤非打印字符
 
-# Modbus通常是低字节在前 (Little Endian)
-data.append(crc & 0xFF)         # Low byte
-data.append((crc >> 8) & 0xFF)  # High byte
+```javascript
+// 只保留可打印 ASCII 字符 (32-126) 和换行符
+const filtered = data.filter(b => 
+    (b >= 32 && b <= 126) || b === 10 || b === 13
+);
+data.length = 0;
+data.push(...filtered);
 ```
 
-#### 示例 6: CRC16-CCITT (XModem) 校验
-```python
-# Pure Python CRC16-CCITT (XModem version)
-# Poly: 0x1021, Init: 0x0000
-crc = 0x0000
-for byte in data:
-    crc ^= (byte << 8)
-    for _ in range(8):
-        if crc & 0x8000:
-            crc = (crc << 1) ^ 0x1021
-        else:
-            crc <<= 1
-    crc &= 0xFFFF # 保持16位
+#### RX Hook：丢弃特定数据
 
-# Big Endian (通常)
-data.append((crc >> 8) & 0xFF)
-data.append((crc >> 8) & 0xFF)
-data.append(crc & 0xFF)
+```javascript
+// 如果数据包含 0xFF，认为是噪声，丢弃
+if (data.includes(0xFF)) {
+    return [];  // 返回空数组表示丢弃
+}
 ```
 
-## 4. Rx Hook 详解 (Receive Hook)
+#### RX Hook：十六进制转 ASCII
 
-### 上下文变量
-- `data`: 这是一个此时此刻从串口接收到的字节列表 (`list` of `int`)。
-
-### 你的任务
-- 修改 `data` 变量。
-- 如果将 `data` 设置为空列表 `[]`，系统将丢弃该包，UI 不会显示任何内容。
-- 如果修改 `data`，UI 将显示修改后的内容。
-
-### 示例代码
-
-#### 示例 1: 简单的过滤 (丢弃特定数据)
-```python
-# 如果包含 0xFF，则认为是噪声，丢弃整个包
-if 0xFF in data:
-    data = []
+```javascript
+// 将收到的十六进制字符串（如 "48656C6C6F"）转换为 ASCII
+const hexStr = String.fromCharCode(...data);
+const bytes = [];
+for (let i = 0; i < hexStr.length; i += 2) {
+    bytes.push(parseInt(hexStr.substr(i, 2), 16));
+}
+return bytes;
 ```
 
-#### 示例 2: 过滤控制字符
-```python
-# 只保留可打印字符 (ASCII 32-126) 和换行符
-data = [b for b in data if (32 <= b <= 126) or b == 0x0A or b == 0x0D]
+---
+
+## 4. 外部程序脚本
+
+外部程序脚本允许调用任意可执行程序来处理数据，适合复杂的协议解析或需要使用特定语言/库的场景。
+
+### 4.1 工作原理
+
+1. 每次触发 Hook 时，后端启动指定的外部程序
+2. 原始数据以**二进制**形式写入程序的 **stdin**
+3. 程序处理后，将结果以**二进制**形式写入 **stdout**
+4. 后端读取 stdout 内容作为处理结果
+
+### 4.2 配置方法
+
+1. 在脚本编辑器中选择 **"External"** 类型
+2. 在输入框中填写完整的命令行，例如：
+
+```
+python process.py
 ```
 
-#### 示例 3: 自动回复 (简单的应答机)
-*注意: 目前 Rx Hook 仅用于处理**接收数据**的显示，不能直接触发发送。自动回复功能将在 Phase 3 实现。*
+```
+node handler.js
+```
 
-## 4. 标准库与环境限制
+```
+./my_processor.exe
+```
 
-### 可用功能
-- **内置函数**: `len()`, `range()`, `min()`, `max()`, `int()`, `hex()`, `print()` (print 内容会在后端日志显示) 等 Python 核心内置函数。
-- **基本类型**: `list`, `dict`, `tuple`, `str`, `bytes`, `int` 等。
-- **控制流**: `if`, `for`, `while`, `try-except` 等。
+> **注意**：命令将通过系统 Shell 执行（Windows: cmd /C，Linux/macOS: sh -c）
 
-### 不可用功能
-为了确保嵌入式环境的安全性和启动速度，当前环境模式为 **Standalone Mode**，**不包含**任何 Python 标准库。
-- ❌ `import sys`
-- ❌ `import os`
-- ❌ `import struct` (请使用位运算代替 `struct.pack`)
-- ❌ `import math`
-- ❌ `import json`
+### 4.3 Python 示例
 
-如果需要复杂的算法 (如加密库)，目前需要使用纯 Python 实现该算法（如上面的 CRC 示例）。
+创建文件 `process.py`：
 
-## 5. 限制与注意事项
+```python
+import sys
 
-- **错误处理**: 如果脚本语法错误 (SyntaxError) 或运行时出错 (RuntimeError)，发送操作将中断，UI 会弹出错误提示。
-- **性能**: 每次发送都会初始化一个新的 VM 上下文。对于简单的逻辑 (如 CRC 计算)，耗时通常在 **毫秒级**，对于 10ms 间隔的高频发送是可以接受的。但请避免在脚本中编写死循环或极高复杂度的计算。
+# 从 stdin 读取二进制数据
+data = sys.stdin.buffer.read()
 
-## 5. 常见问题 (FAQ)
+# 处理数据：添加校验和
+checksum = sum(data) & 0xFF
+result = data + bytes([checksum])
 
-**Q: 只有 `Tx Hook` 吗？**
-A: 支持 `Tx Hook` (发送前) 和 `Rx Hook` (接收前)。你可以在脚本编辑器中切换标签页。
+# 输出到 stdout（必须用 buffer 写入二进制）
+sys.stdout.buffer.write(result)
+```
 
-**Q: 脚本能保存吗？**
-A: 可以。编辑器顶部提供了 "Save to File" 和 "Open File" 按钮，方便你将脚本保存到本地磁盘（.py 格式）。但是，重启软件后，需要重新点击 "Apply" 按钮或加载文件来激活脚本（后台状态默认重置）。
+在脚本编辑器中配置命令：
 
-**Q: 支持哪些 Python 版本？**
-A: 语法兼容 Python 3。
+```
+python process.py
+```
+
+### 4.4 Python 示例：CRC16 计算
+
+```python
+import sys
+
+def crc16_modbus(data):
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ 0xA001
+            else:
+                crc >>= 1
+    return crc
+
+# 读取数据
+data = sys.stdin.buffer.read()
+
+# 计算 CRC
+crc = crc16_modbus(data)
+
+# 追加 CRC（低字节在前）
+result = data + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+
+# 输出
+sys.stdout.buffer.write(result)
+```
+
+### 4.5 Node.js 示例
+
+创建文件 `handler.js`：
+
+```javascript
+const fs = require('fs');
+
+// 从 stdin 读取数据
+const data = fs.readFileSync(0);  // 0 是 stdin 的文件描述符
+
+// 处理：添加包头
+const header = Buffer.from([0xAA, 0x55]);
+const result = Buffer.concat([header, data]);
+
+// 输出到 stdout
+process.stdout.write(result);
+```
+
+---
+
+## 5. 使用模板
+
+脚本编辑器提供了常用模板，点击 **"Templates"** 下拉菜单快速加载：
+
+### JavaScript 模板
+
+| 模板名称 | 用途 |
+|----------|------|
+| TX: Add Checksum | 添加校验和 |
+| TX: Add Header/Footer | 添加包头包尾 |
+| RX: Only Printable | 过滤非打印字符 |
+
+### External 模板
+
+| 模板名称 | 命令 |
+|----------|------|
+| Python Script | `python script.py` |
+| Node Script | `node script.js` |
+| Executable | `./path/to/executable.exe` |
+
+---
+
+## 6. 注意事项
+
+### 性能
+
+- **JavaScript 脚本**：毫秒级延迟，适合高频数据
+- **外部程序**：每次调用需启动进程，有一定开销（~10-50ms）
+
+### 错误处理
+
+- **JavaScript 语法错误**：脚本不会执行，控制台显示错误
+- **外部程序错误**：
+  - 程序不存在：显示 "Failed to spawn process" 错误
+  - 程序返回非零退出码：操作中断，显示 stderr 内容
+
+### 安全性
+
+- JavaScript 脚本在浏览器沙箱中执行，权限受限
+- 外部程序以当前用户权限执行，请确保脚本来源可信
+
+---
+
+## 7. 常见问题
+
+**Q: 脚本配置会保存吗？**
+
+A: 是的。脚本配置保存在 `config.yaml` 中，应用重启后自动恢复。
+
+**Q: 可以同时运行 TX 和 RX 脚本吗？**
+
+A: 可以。TX 和 RX 是独立的，可以分别配置并同时运行。
+
+**Q: JS 和 External 可以混用吗？**
+
+A: 可以。例如 TX 使用 JavaScript，RX 使用外部 Python 程序。
+
+**Q: 外部程序的工作目录是什么？**
+
+A: 工作目录是 SerialMaster 可执行文件所在的目录。
+
+**Q: 为什么 Python 脚本的输出是乱码？**
+
+A: 请确保使用 `sys.stdout.buffer.write()` 输出二进制数据，而不是 `print()`。
