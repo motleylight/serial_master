@@ -106,7 +106,7 @@ pub fn run() {
             commands::set_script,
             // 端口共享命令
             commands::check_com0com_installed,
-            commands::check_hub4com_installed,
+
             commands::get_virtual_pairs,
             commands::create_virtual_pair,
             commands::remove_virtual_pair,

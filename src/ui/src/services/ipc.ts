@@ -103,15 +103,7 @@ export class PortSharingService {
         return invoke('check_com0com_installed');
     }
 
-    /**
-     * 检测 hub4com 是否已安装
-     */
-    static async isHub4comInstalled(): Promise<boolean> {
-        if (!isTauri()) {
-            return false;
-        }
-        return invoke('check_hub4com_installed');
-    }
+
 
     /**
      * 获取虚拟端口对列表

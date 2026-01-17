@@ -4,11 +4,11 @@
 
 use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
-use log::info;
+
 
 use crate::core::com0com_manager::{Com0comManager, PortPair};
 
-use crate::core::hub4com_manager::Hub4comManager; // Deprecated but kept for structure if needed later? Or remove.
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool};
 
@@ -27,8 +27,7 @@ pub struct SharingStatus {
 pub struct PortSharingManager {
     /// com0com 管理器
     com0com: Option<Com0comManager>,
-    /// hub4com 管理器 (保留引用但优先使用内部桥接)
-    hub4com: Option<Hub4comManager>,
+
     /// 当前共享状态
     status: SharingStatus,
     /// 运行标志 (用于停止桥接线程)
@@ -39,11 +38,9 @@ impl PortSharingManager {
     /// 创建新的共享管理器
     pub fn new() -> Self {
         let com0com = Com0comManager::new().ok();
-        let hub4com = Hub4comManager::new().ok();
-        
+
         Self {
             com0com,
-            hub4com,
             status: SharingStatus {
                 enabled: false,
                 port_pairs: Vec::new(),
@@ -58,10 +55,7 @@ impl PortSharingManager {
         self.com0com.is_some()
     }
     
-    /// 检测 hub4com 是否已安装 (虽然我们现在用内部实现，但通常 com0com 装了它也没事)
-    pub fn is_hub4com_installed(&self) -> bool {
-        self.hub4com.is_some()
-    }
+
     
     /// 获取 com0com 管理器引用
     pub fn com0com(&self) -> Option<&Com0comManager> {

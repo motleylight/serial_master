@@ -42,7 +42,6 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [com0comInstalled, setCom0comInstalled] = useState<boolean>(false);
-    const [hub4comInstalled, setHub4comInstalled] = useState<boolean>(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -54,9 +53,7 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
 
     const checkDependencies = async () => {
         const c0c = await PortSharingService.isCom0comInstalled();
-        const h4c = await PortSharingService.isHub4comInstalled();
         setCom0comInstalled(c0c);
-        setHub4comInstalled(h4c);
     };
 
     // Slow operation - only run on mount
@@ -532,13 +529,12 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
                         </div>
                     )}
 
-                    {(!com0comInstalled || !hub4comInstalled) && (
+                    {(!com0comInstalled) && (
                         <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-md flex items-start gap-2 text-sm">
                             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                             <div className="flex flex-col gap-1">
                                 <span className="font-medium">Missing Dependencies</span>
                                 {!com0comInstalled && <span>• com0com driver is not found. Virtual ports cannot be created.</span>}
-                                {!hub4comInstalled && <span>• hub4com tool is not found. Port sharing will not work.</span>}
                             </div>
                         </div>
                     )}

@@ -229,11 +229,7 @@ pub async fn check_com0com_installed() -> bool {
     Com0comManager::is_installed()
 }
 
-/// 检测 hub4com 是否已安装
-#[tauri::command]
-pub async fn check_hub4com_installed() -> bool {
-    serial_master::core::hub4com_manager::Hub4comManager::is_installed()
-}
+
 
 /// 获取虚拟端口对列表
 #[tauri::command]

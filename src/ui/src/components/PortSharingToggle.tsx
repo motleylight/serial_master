@@ -14,12 +14,11 @@ export function PortSharingToggle({ onClick }: PortSharingToggleProps) {
         physical_port: null
     });
     const [com0comInstalled, setCom0comInstalled] = useState<boolean | null>(null);
-    const [hub4comInstalled, setHub4comInstalled] = useState<boolean | null>(null);
+
 
     // Check dependencies
     useEffect(() => {
         PortSharingService.isCom0comInstalled().then(setCom0comInstalled);
-        PortSharingService.isHub4comInstalled().then(setHub4comInstalled);
     }, []);
 
     // Refresh status periodically or on mount
@@ -48,7 +47,7 @@ export function PortSharingToggle({ onClick }: PortSharingToggleProps) {
     };
 
     // Dependencies warning
-    if (com0comInstalled === false || hub4comInstalled === false) {
+    if (com0comInstalled === false) {
         return (
             <button
                 onClick={onClick}
