@@ -51,14 +51,21 @@ export function ControlPanel({
     const baudRef = useRef<HTMLButtonElement>(null);
     const [baudPos, setBaudPos] = useState({ left: 0, bottom: 0 });
 
+    const configRef = useRef(config);
+    useEffect(() => {
+        configRef.current = config;
+    }, [config]);
+
     const refreshPorts = async () => {
         setLoading(true);
         try {
             const availablePorts = await SerialService.getPorts();
             setPorts(availablePorts);
-            // Auto-select first if none selected or current not invalid
-            const currentIsValid = availablePorts.some(p => p.port_name === config.port_name);
-            if (availablePorts.length > 0 && (!config.port_name || !currentIsValid)) {
+            // Auto-select first ONLY if none is currently configured.
+            // Do NOT auto-switch if the configured port is missing/invalid, as it might be temporary 
+            // or a virtual port that appears later. Keep user selection stable.
+            // Use ref to check the LATEST config, avoiding closure staleness issues
+            if (availablePorts.length > 0 && !configRef.current.port_name) {
                 handleChange("port_name", availablePorts[0].port_name);
             }
         } catch (error) {

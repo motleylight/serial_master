@@ -45,7 +45,7 @@ const MAX_LOG_COUNT = 10000;
 const BATCH_UPDATE_INTERVAL = 100; // ms
 
 function App() {
-  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig, updateUiConfig, updatePathsConfig, updateScriptConfig } = useAppConfig();
+  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig, updateUiConfig, updatePathsConfig, updateScriptConfig, loaded } = useAppConfig();
   const serialConfig = config.serial;
   const uiConfig = config.ui;
 
@@ -53,6 +53,8 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [showPortSharing, setShowPortSharing] = useState(false);
+
+
 
   // Buffer for batch updates - reduces render frequency significantly
   const logBufferRef = useRef<LogData[]>([]);
@@ -208,6 +210,17 @@ function App() {
   const handleClear = useCallback(() => {
     setLogs([]);
   }, []);
+
+  if (!loaded) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background text-foreground">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm text-muted-foreground">Loading configuration...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>

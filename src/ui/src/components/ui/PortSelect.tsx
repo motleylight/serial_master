@@ -19,22 +19,7 @@ export function PortSelect({ value, onChange, ports }: PortSelectProps) {
     // Fixed positioning state
     const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
-    // Calculate position when opening
-    useEffect(() => {
-        if (isOpen && containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            // Default: open upwards if space allows? Or downwards?
-            // "absolute bottom-full" -> Upwards.
-            // Let's stick to upwards.
-            setDropdownStyle({
-                position: 'fixed',
-                left: rect.left,
-                bottom: window.innerHeight - rect.top + 4, // 4px gap
-                width: '16rem', // w-64
-                zIndex: 50
-            });
-        }
-    }, [isOpen]);
+
 
     // Close when clicking outside
     useEffect(() => {
@@ -73,7 +58,19 @@ export function PortSelect({ value, onChange, ports }: PortSelectProps) {
     return (
         <div className="relative" ref={containerRef}>
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => {
+                    if (!isOpen && containerRef.current) {
+                        const rect = containerRef.current.getBoundingClientRect();
+                        setDropdownStyle({
+                            position: 'fixed',
+                            left: rect.left,
+                            bottom: window.innerHeight - rect.top + 4,
+                            width: '16rem',
+                            zIndex: 50
+                        });
+                    }
+                    setIsOpen(!isOpen);
+                }}
                 className="h-7 w-20 flex items-center justify-between rounded border border-input bg-background px-2 text-xs outline-none hover:bg-accent/50"
                 title={selectedPort?.product_name || value}
             >
