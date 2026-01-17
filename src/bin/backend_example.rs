@@ -43,7 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         serialport::DataBits::Eight,
         serialport::FlowControl::None,
         serialport::Parity::None,
-        serialport::StopBits::One
+        serialport::StopBits::One,
+        std::time::Duration::from_millis(100)
     ) {
         Ok(_) => println!("   Successfully opened COM8"),
         Err(e) => {

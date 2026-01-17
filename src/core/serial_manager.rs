@@ -35,13 +35,14 @@ impl SerialManager {
         flow_control: serialport::FlowControl,
         parity: serialport::Parity,
         stop_bits: serialport::StopBits,
+        timeout: Duration,
     ) -> Result<()> {
         let port = serialport::new(port_name, baud_rate)
             .data_bits(data_bits)
             .flow_control(flow_control)
             .parity(parity)
             .stop_bits(stop_bits)
-            .timeout(Duration::from_millis(10))
+            .timeout(timeout)
             .open()
             .map_err(|e| anyhow!("Failed to open port: {}", e))?;
 
@@ -54,26 +55,53 @@ impl SerialManager {
         if let Some(tx) = self.tx.clone() {
             std::thread::spawn(move || {
                 let mut buf = [0u8; 4096];
+                let mut rx_buffer: Vec<u8> = Vec::with_capacity(4096);
+                
                 while should_run.load(Ordering::SeqCst) {
                     match port_clone.read(&mut buf) {
                         Ok(n) if n > 0 => {
-                            let data = buf[0..n].to_vec();
+                            rx_buffer.extend_from_slice(&buf[0..n]);
                             
-                            // Send to UI
-                            if tx.blocking_send(data.clone()).is_err() {
-                                break;
-                            }
-                            
-                            // Forward to Virtual Port (if sharing)
-                            if let Ok(mut v_guard) = virtual_port_handle.lock() {
-                                if let Some(v_port) = v_guard.as_mut() {
-                                    let _ = v_port.write_all(&data);
-                                    let _ = v_port.flush();
+                            // Prevent buffer from growing too large (latency/memory safeguard)
+                            if rx_buffer.len() >= 4096 {
+                                let data = rx_buffer.clone();
+                                rx_buffer.clear();
+
+                                // Send to UI
+                                if tx.blocking_send(data.clone()).is_err() {
+                                    break;
+                                }
+
+                                // Forward to Virtual Port (if sharing)
+                                if let Ok(mut v_guard) = virtual_port_handle.lock() {
+                                    if let Some(v_port) = v_guard.as_mut() {
+                                        let _ = v_port.write_all(&data);
+                                        let _ = v_port.flush();
+                                    }
                                 }
                             }
                         }
                         Ok(_) => {}
-                        Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => continue,
+                        Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                             // Timeout occurred: This is our "frame break". Flush whatever we have.
+                             if !rx_buffer.is_empty() {
+                                let data = rx_buffer.clone();
+                                rx_buffer.clear();
+
+                                // Send to UI
+                                if tx.blocking_send(data.clone()).is_err() {
+                                    break;
+                                }
+
+                                // Forward to Virtual Port (if sharing)
+                                if let Ok(mut v_guard) = virtual_port_handle.lock() {
+                                    if let Some(v_port) = v_guard.as_mut() {
+                                        let _ = v_port.write_all(&data);
+                                        let _ = v_port.flush();
+                                    }
+                                }
+                             }
+                        },
                         Err(e) => {
                             error!("Serial read error: {}", e);
                             break;

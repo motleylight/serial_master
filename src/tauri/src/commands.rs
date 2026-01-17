@@ -19,6 +19,12 @@ pub struct SerialConfig {
     pub flow_control: String,
     pub parity: String,
     pub stop_bits: u8,
+    #[serde(default = "default_timeout")]
+    pub timeout: u64, // ms
+}
+
+fn default_timeout() -> u64 {
+    10
 }
 
 impl SerialConfig {
@@ -184,13 +190,17 @@ pub async fn connect(
     let mut manager = state.lock().await;
     let (data_bits, flow_control, parity, stop_bits) = config.to_params()?;
     
+    // Use configured timeout, default to 10ms if not explicitly set (though serde default handles it)
+    let timeout = if config.timeout == 0 { 10 } else { config.timeout };
+
     manager.open(
         &config.port_name, 
         config.baud_rate,
         data_bits,
         flow_control,
         parity,
-        stop_bits
+        stop_bits,
+        std::time::Duration::from_millis(timeout)
     ).map_err(to_string_err)?;
     Ok(())
 }

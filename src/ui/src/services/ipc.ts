@@ -15,6 +15,7 @@ export interface SerialConfig {
     flow_control: string;
     parity: string;
     stop_bits: number;
+    timeout?: number; // ms
 }
 
 // Helper to check if running in Tauri

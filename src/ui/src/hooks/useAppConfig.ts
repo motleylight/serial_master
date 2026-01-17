@@ -23,6 +23,7 @@ export interface SerialConfig {
     stop_bits: number;
     parity: string;
     flow_control: string;
+    timeout: number; // ms
 }
 
 export interface TerminalConfig {
@@ -64,7 +65,8 @@ const DEFAULT_CONFIG: AppConfig = {
         data_bits: 8,
         stop_bits: 1,
         parity: 'None',
-        flow_control: 'None'
+        flow_control: 'None',
+        timeout: 10
     },
     terminal: {
         hexMode: false,

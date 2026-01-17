@@ -38,7 +38,15 @@ async fn test_loopback_integrity() -> Result<()> {
 
     // 2. Setup Writer (System Under Test)
     let mut manager = SerialManager::new();
-    manager.open(WRITER_PORT, BAUD_RATE).context("Failed to open writer port via Manager")?;
+    manager.open(
+        WRITER_PORT, 
+        BAUD_RATE,
+        serialport::DataBits::Eight,
+        serialport::FlowControl::None,
+        serialport::Parity::None,
+        serialport::StopBits::One,
+        Duration::from_millis(100)
+    ).context("Failed to open writer port via Manager")?;
 
     // 3. Test Data
     let test_payload = b"Hello SerialMaster Phase0";
@@ -72,7 +80,15 @@ async fn test_stress_write() -> Result<()> {
         .open()?;
 
     let mut manager = SerialManager::new();
-    manager.open(WRITER_PORT, BAUD_RATE)?;
+    manager.open(
+        WRITER_PORT, 
+        BAUD_RATE,
+        serialport::DataBits::Eight,
+        serialport::FlowControl::None,
+        serialport::Parity::None,
+        serialport::StopBits::One,
+        Duration::from_millis(100)
+    )?;
 
     // Send 100 fast packets
     for i in 0..100 {
