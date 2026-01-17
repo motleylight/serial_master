@@ -45,8 +45,8 @@ export interface UiConfig {
     inputHistory: string[];
 }
 
-export interface PathsConfig {
-    commandsFile: string;
+export interface FilesConfig {
+    commands: string;
 }
 
 export interface AppConfig {
@@ -54,7 +54,7 @@ export interface AppConfig {
     terminal: TerminalConfig;
     send: SendConfig;
     ui: UiConfig;
-    paths: PathsConfig;
+    files: FilesConfig;
     scripts: ScriptConfig;
 }
 
@@ -84,8 +84,8 @@ const DEFAULT_CONFIG: AppConfig = {
         inputDraft: '',
         inputHistory: []
     },
-    paths: {
-        commandsFile: 'commands.yaml' // Default relative path
+    files: {
+        commands: 'commands.yaml' // Default relative path
     },
     scripts: {
         tx: { type: null, content: '' },
@@ -119,7 +119,7 @@ export function useAppConfig() {
                             terminal: { ...prev.terminal, ...parsed.terminal },
                             send: { ...prev.send, ...parsed.send },
                             ui: { ...prev.ui, ...parsed.ui },
-                            paths: { ...prev.paths, ...parsed.paths },
+                            files: { ...prev.files, ...parsed.files },
                             scripts: { ...prev.scripts, ...parsed.scripts }
                         }));
                     }
@@ -187,10 +187,10 @@ export function useAppConfig() {
         }));
     }, []);
 
-    const updatePathsConfig = useCallback((updates: Partial<PathsConfig>) => {
+    const updateFilesConfig = useCallback((updates: Partial<FilesConfig>) => {
         setConfig(prev => ({
             ...prev,
-            paths: { ...prev.paths, ...updates }
+            files: { ...prev.files, ...updates }
         }));
     }, []);
 
@@ -211,7 +211,7 @@ export function useAppConfig() {
         updateTerminalConfig,
         updateSendConfig,
         updateUiConfig,
-        updatePathsConfig,
+        updateFilesConfig,
         updateScriptConfig,
         loaded,
         saveStatus,

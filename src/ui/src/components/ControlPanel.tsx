@@ -8,6 +8,8 @@ import { PortSharingToggle } from "./PortSharingToggle";
 import { SendConfig, UiConfig } from "../hooks/useAppConfig";
 import { ScriptService } from "../services/ScriptService";
 
+import { TerminalConfig } from "../hooks/useAppConfig";
+
 interface ControlPanelProps {
     config: SerialConfig;
     setConfig: (config: SerialConfig) => void;
@@ -21,6 +23,8 @@ interface ControlPanelProps {
     onSendConfigChange: (config: Partial<SendConfig>) => void;
     ui: UiConfig;
     onUiUpdate: (updates: Partial<UiConfig>) => void;
+    terminalConfig: TerminalConfig;
+    onTerminalConfigChange: (config: Partial<TerminalConfig>) => void;
 }
 
 export function ControlPanel({
@@ -36,6 +40,8 @@ export function ControlPanel({
     onSendConfigChange,
     ui,
     onUiUpdate,
+    terminalConfig,
+    onTerminalConfigChange,
 }: ControlPanelProps) {
     // --- Settings Logic ---
     const [ports, setPorts] = useState<SerialPortInfo[]>([]);
@@ -134,7 +140,8 @@ export function ControlPanel({
 
 
     // Derived values for convenience
-    const isHex = sendConfig?.hexMode ?? false;
+    // Unified Hex Mode: View is primary, but we sync Send to it.
+    const isHex = terminalConfig?.hexMode ?? false;
     const appendMode = sendConfig?.appendMode ?? 'None';
     const history = ui.inputHistory;
 
@@ -153,6 +160,7 @@ export function ControlPanel({
 
         try {
             let data: Uint8Array;
+            // Use local isHex which reflects terminalConfig.hexMode
             if (isHex) {
                 const cleanHex = input.replace(/[^0-9A-Fa-f]/g, '');
                 if (cleanHex.length % 2 !== 0) {
@@ -468,7 +476,11 @@ export function ControlPanel({
                 <div className="flex-shrink overflow-hidden flex items-center min-w-0">
                     <HexSwitch
                         checked={isHex}
-                        onChange={(val) => onSendConfigChange({ hexMode: val })}
+                        onChange={(val) => {
+                            // Update BOTH Send and Terminal (Input and Output) Configs
+                            onSendConfigChange({ hexMode: val });
+                            onTerminalConfigChange({ hexMode: val });
+                        }}
                         size="sm"
                         className="flex-shrink-0"
                     />
@@ -481,7 +493,7 @@ export function ControlPanel({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder={isHex ? "Enter Hex (e.g. AA BB CC)" : "Enter text to send... (↑/↓ for history)"}
+                            placeholder={isHex ? "Enter Hex (e.g. AA BB CC) (↑/↓ for history)" : "Enter text to send... (↑/↓ for history)"}
                             className={cn(
                                 "w-full h-7 px-2 text-xs border border-input rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary",
                                 isHex && "font-mono"

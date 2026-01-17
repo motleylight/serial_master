@@ -2,7 +2,6 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { type LogData, type HighlightRange, LogEntry, type ViewMode, formatLogLine } from './LogEntry';
 import { cn } from '../../lib/utils';
 import { Trash2, Save as SaveIcon, PanelRight, Search, ChevronUp, ChevronDown, ChevronRight, WrapText, FolderOpen } from 'lucide-react';
-import { HexSwitch } from '../ui/HexSwitch';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -237,10 +236,7 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
         onConfigChange({ autoScroll: val });
     };
 
-    const updateViewMode = (val: ViewMode) => {
-        setViewMode(val);
-        onConfigChange({ hexMode: val === 'HEX' });
-    };
+
 
     const updateWordWrap = (val: boolean) => {
         setWordWrap(val);
@@ -667,12 +663,6 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                             Info
                         </button>
 
-                        <div className="h-4 w-[1px] bg-border mx-1" />
-                        <HexSwitch
-                            checked={viewMode === 'HEX'}
-                            onChange={(checked) => updateViewMode(checked ? 'HEX' : 'ASCII')}
-                            size="sm"
-                        />
                         <div className="h-4 w-[1px] bg-border mx-1" />
                     </div>
 

@@ -45,7 +45,7 @@ const MAX_LOG_COUNT = 10000;
 const BATCH_UPDATE_INTERVAL = 100; // ms
 
 function App() {
-  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig, updateUiConfig, updatePathsConfig, updateScriptConfig, loaded } = useAppConfig();
+  const { config, updateSerialConfig, updateTerminalConfig, updateSendConfig, updateUiConfig, updateFilesConfig, updateScriptConfig, loaded } = useAppConfig();
   const serialConfig = config.serial;
   const uiConfig = config.ui;
 
@@ -260,6 +260,8 @@ function App() {
                   onOpenPortSharing={() => setShowPortSharing(true)}
                   ui={uiConfig}
                   onUiUpdate={updateUiConfig}
+                  terminalConfig={config.terminal}
+                  onTerminalConfigChange={updateTerminalConfig}
                 />
               </div>
 
@@ -318,8 +320,8 @@ function App() {
                 <CommandManager
                   onSend={handleSend}
                   connected={connected}
-                  filePath={config.paths.commandsFile}
-                  onFilePathChange={(path) => updatePathsConfig({ commandsFile: path })}
+                  filePath={config.files.commands}
+                  onFilePathChange={(path) => updateFilesConfig({ commands: path })}
                 />
               </div>
             </div>
