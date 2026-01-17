@@ -231,10 +231,16 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
     }, [config.wordWrap]);
 
     // Helper to update both local and config
-    const updateAutoScroll = (val: boolean) => {
+    const updateAutoScroll = useCallback((val: boolean) => {
         setAutoScroll(val);
         onConfigChange({ autoScroll: val });
-    };
+    }, [onConfigChange]);
+
+    // Ref to access current autoScroll value in callbacks without stale closure
+    const autoScrollRef = useRef(autoScroll);
+    useEffect(() => {
+        autoScrollRef.current = autoScroll;
+    }, [autoScroll]);
 
 
 
@@ -265,10 +271,34 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
     const [isRegexValid, setIsRegexValid] = useState(true);
 
     const listRef = useRef<ListImperativeAPI>(null);
+    const listContainerRef = useRef<HTMLDivElement>(null);
     const isProgrammaticScrollRef = useRef(false);
-    const scrollThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // 用户手动切换 autoScroll 后的冷却时间，防止 handleRowsRendered 覆盖用户选择
     const userManualOverrideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // User interaction handlers for autoscroll disconnect
+    // 1. Click on terminal content = user wants to inspect specific content
+    // 2. Mousedown on scrollbar = user wants to manually control scroll position
+    const handleTerminalClick = useCallback(() => {
+        if (autoScrollRef.current) {
+            updateAutoScroll(false);
+        }
+    }, [updateAutoScroll]);
+
+    const handleTerminalMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (!autoScrollRef.current) return;
+
+        const container = e.currentTarget;
+        const rect = container.getBoundingClientRect();
+        // Scrollbar is typically ~17px wide on Windows, use 20px threshold
+        const scrollbarWidth = 20;
+        const clickX = e.clientX - rect.left;
+        const isScrollbarArea = clickX > rect.width - scrollbarWidth;
+
+        if (isScrollbarArea) {
+            updateAutoScroll(false);
+        }
+    }, [updateAutoScroll]);
 
     // Validating regex
     useEffect(() => {
@@ -480,38 +510,24 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                 align: 'end',
                 behavior: 'auto'
             });
+            // Use double RAF to ensure scroll events complete before clearing flag
             requestAnimationFrame(() => {
-                isProgrammaticScrollRef.current = false;
+                requestAnimationFrame(() => {
+                    isProgrammaticScrollRef.current = false;
+                });
             });
         }
     }, [displayLogs.length, autoScroll]);
 
     const handleRowsRendered = useCallback((
-        visibleRows: { startIndex: number; stopIndex: number },
+        _visibleRows: { startIndex: number; stopIndex: number },
         _allRows: { startIndex: number; stopIndex: number }
     ) => {
-        if (isProgrammaticScrollRef.current) return;
-        if (userManualOverrideRef.current) return; // Skip auto-logic if user just clicked manually
-        if (displayLogs.length === 0) return;
-        if (scrollThrottleRef.current) return;
-
-        scrollThrottleRef.current = setTimeout(() => {
-            scrollThrottleRef.current = null;
-
-            // Double check inside timeout in case it was scheduled before manual override
-            if (userManualOverrideRef.current) return;
-
-            const lastVisibleIndex = visibleRows.stopIndex;
-            const lastLogIndex = displayLogs.length - 1;
-            const isNearBottom = lastLogIndex - lastVisibleIndex <= 2;
-
-            setAutoScroll(prev => {
-                if (prev && !isNearBottom) return false;
-                if (!prev && isNearBottom) return true;
-                return prev;
-            });
-        }, 50);
-    }, [displayLogs.length]);
+        // Position-based disconnect removed.
+        // Autoscroll disconnect is now triggered by explicit user actions:
+        // - Click on terminal content (handleTerminalClick)
+        // - Mousedown on scrollbar area (handleTerminalMouseDown)
+    }, []);
 
     const handleSaveLog = async () => {
         try {
@@ -880,7 +896,12 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
             </div>
 
             {/* Virtualized List */}
-            <div className="flex-1 min-h-0 bg-white border-t border-border">
+            <div
+                ref={listContainerRef}
+                className="flex-1 min-h-0 bg-white border-t border-border"
+                onClick={handleTerminalClick}
+                onMouseDown={handleTerminalMouseDown}
+            >
                 <AutoSizer
                     renderProp={({ height, width }) => {
                         if (height === undefined || width === undefined) {
