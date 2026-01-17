@@ -146,6 +146,9 @@ function App() {
 
       if (connected) {
         await SerialService.disconnect();
+        // Flush and clear buffer before reconnecting
+        flushLogBuffer();
+        logBufferRef.current = [];
         setConnected(false);
       }
 
@@ -160,9 +163,34 @@ function App() {
 
   const handleDisconnect = async () => {
     try {
+      // First, tell the backend to stop sending data
       await SerialService.disconnect();
       setConnected(false);
-      addSystemLog("Disconnected", 'SYS');
+
+      // Wait a short time for any "in-flight" events to arrive and be buffered
+      // These are events that were already in Tauri's event channel before disconnect
+      // This ensures we DON'T LOSE any data - all logs are preserved
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Now atomically flush all buffered data AND add the disconnect message
+      // This ensures ALL serial data (including late-arriving events) appear BEFORE "Disconnected"
+      const bufferedLogs = logBufferRef.current;
+      logBufferRef.current = [];
+
+      const disconnectLog: LogData = {
+        id: ++logIdCounterRef.current,
+        timestamp: Date.now(),
+        type: 'SYS',
+        data: "Disconnected"
+      };
+
+      setLogs(prev => {
+        const newLogs = [...prev, ...bufferedLogs, disconnectLog];
+        if (newLogs.length > MAX_LOG_COUNT) {
+          return newLogs.slice(newLogs.length - MAX_LOG_COUNT);
+        }
+        return newLogs;
+      });
     } catch (e: any) {
       console.error(e);
       addSystemLog(`Disconnect failed: ${e.toString()}`, 'ERR');

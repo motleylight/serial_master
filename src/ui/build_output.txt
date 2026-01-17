@@ -1,0 +1,13 @@
+﻿
+> ui@0.0.0 build
+> tsc -b && vite build
+
+[36mvite v7.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m鉁?[39m 1741 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                 [39m[1m[2m  0.45 kB[22m[1m[22m[2m 鈹?gzip:   0.29 kB[22m
+[2mdist/[22m[35massets/index-CX8q2fjQ.css  [39m[1m[2m 33.80 kB[22m[1m[22m[2m 鈹?gzip:   6.58 kB[22m
+[2mdist/[22m[36massets/index-CuJTbmjH.js   [39m[1m[2m368.95 kB[22m[1m[22m[2m 鈹?gzip: 115.16 kB[22m
+[32m鉁?built in 2.65s[39m
