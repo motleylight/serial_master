@@ -20,6 +20,12 @@ interface TerminalContainerProps {
 const ROW_HEIGHT = 24;
 const MAX_CROSS_LINES = 5;
 
+// 动态行高估算参数
+const CHAR_WIDTH = 6.0; // text-xs 等宽字体约 6px/字符
+const LINE_HEIGHT = 18; // 多行模式下每行高度（text-xs 12px * 1.5 行高）
+const METADATA_WIDTH = 155; // 时间戳 + 类型 + gap 占用的宽度
+const CONTENT_PADDING = 16; // 左右 padding
+
 const textDecoder = new TextDecoder();
 
 type SearchMode = 'search' | 'filter';
@@ -276,6 +282,55 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
     // 用户手动切换 autoScroll 后的冷却时间，防止 handleRowsRendered 覆盖用户选择
     const userManualOverrideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // 动态行高缓存系统
+    // key = `${logId}-${containerWidth}`, value = estimated height
+    const heightCacheRef = useRef<Map<string, number>>(new Map());
+    const [containerWidth, setContainerWidth] = useState(0);
+    const lastContainerWidthRef = useRef(0);
+    // 用于强制刷新 List 的 key
+    const [listKey, setListKey] = useState(0);
+
+    // 当容器宽度变化时清空缓存
+    useEffect(() => {
+        if (containerWidth !== lastContainerWidthRef.current && containerWidth > 0) {
+            heightCacheRef.current.clear();
+            lastContainerWidthRef.current = containerWidth;
+            // 强制刷新 List
+            setListKey(k => k + 1);
+        }
+    }, [containerWidth]);
+
+    // 当 wordWrap 或 showMetadata 切换时清空缓存
+    useEffect(() => {
+        heightCacheRef.current.clear();
+        setListKey(k => k + 1);
+    }, [wordWrap, showMetadata]);
+
+    // 估算单行内容需要的高度
+    const estimateRowHeight = useCallback((log: LogData, width: number): number => {
+        if (!wordWrap || width <= 0) {
+            return ROW_HEIGHT;
+        }
+
+        const text = getLogText(log);
+        // 计算可用内容宽度
+        const availableWidth = width - (showMetadata ? METADATA_WIDTH : 0) - CONTENT_PADDING;
+        if (availableWidth <= 0) {
+            return ROW_HEIGHT;
+        }
+
+        // 估算每行可容纳的字符数
+        const charsPerLine = Math.floor(availableWidth / CHAR_WIDTH);
+        if (charsPerLine <= 0) {
+            return ROW_HEIGHT;
+        }
+
+        // 估算需要的行数，使用更精确的行高
+        const lines = Math.ceil(text.length / charsPerLine);
+        // 多行时使用 LINE_HEIGHT，加上 8px 的上下 padding
+        return Math.max(ROW_HEIGHT, lines * LINE_HEIGHT + 8);
+    }, [wordWrap, showMetadata]);
+
     // User interaction handlers for autoscroll disconnect
     // 1. Click on terminal content = user wants to inspect specific content
     // 2. Mousedown on scrollbar = user wants to manually control scroll position
@@ -420,6 +475,28 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
     }, [visibleLogs, debouncedSearchText, debouncedReplaceText, showReplace, debouncedContextLines, matchResults, isRegex, isRegexValid, caseSensitive]);
 
     const displayLogs = searchMode === 'filter' ? filterResult : visibleLogs;
+
+    // 获取指定行的高度（带缓存）
+    const getRowHeight = useCallback((index: number): number => {
+        if (!wordWrap) {
+            return ROW_HEIGHT;
+        }
+
+        const log = displayLogs[index];
+        if (!log) {
+            return ROW_HEIGHT;
+        }
+
+        const cacheKey = `${log.id}-${containerWidth}`;
+        const cached = heightCacheRef.current.get(cacheKey);
+        if (cached !== undefined) {
+            return cached;
+        }
+
+        const height = estimateRowHeight(log, containerWidth);
+        heightCacheRef.current.set(cacheKey, height);
+        return height;
+    }, [wordWrap, displayLogs, containerWidth, estimateRowHeight]);
 
     const displayMatchResults = useMemo((): Map<number, MatchResult> => {
         if (searchMode !== 'filter' || !filterIndexMap) {
@@ -654,7 +731,7 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                 <div
                     className="grid items-center px-2 py-1 gap-x-2 gap-y-1"
                     style={{
-                        gridTemplateColumns: 'minmax(0,1fr) minmax(240px,1fr) auto minmax(0,130px)',
+                        gridTemplateColumns: 'auto minmax(240px,1fr) auto minmax(0,130px)',
                         gridTemplateRows: showReplace ? 'auto auto' : 'auto'
                     }}
                 >
@@ -915,13 +992,19 @@ export const TerminalContainer = ({ logs, setLogs, onClear, config, onConfigChan
                         if (height === undefined || width === undefined) {
                             return null;
                         }
+                        // 更新容器宽度以供高度计算使用
+                        if (width !== containerWidth) {
+                            // 使用 setTimeout 避免在 render 中直接 setState
+                            setTimeout(() => setContainerWidth(width), 0);
+                        }
                         return (
                             <List
+                                key={listKey}
                                 listRef={listRef}
                                 rowComponent={LogRow}
                                 rowProps={rowProps}
                                 rowCount={displayLogs.length}
-                                rowHeight={ROW_HEIGHT}
+                                rowHeight={wordWrap ? getRowHeight : ROW_HEIGHT}
                                 className="font-mono text-xs"
                                 overscanCount={10}
                                 style={{ height, width }}

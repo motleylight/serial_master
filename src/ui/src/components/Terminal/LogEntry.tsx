@@ -150,18 +150,21 @@ export const LogEntry = React.memo(({ entry, mode, style, index, highlights, isC
 
     return (
         <div style={style} className={cn(
-            "flex items-center gap-2 px-2 hover:bg-black/10 font-mono text-xs text-gray-800",
-            wordWrap ? "whitespace-pre-wrap break-all" : "whitespace-nowrap",
+            "flex gap-2 px-2 hover:bg-black/10 font-mono text-xs text-gray-800 overflow-hidden",
+            wordWrap ? "items-start py-1" : "items-center",
             index % 2 === 0 ? "bg-gray-50" : "bg-white",
             isCurrentMatch && "bg-orange-50"
         )}>
             {showMetadata && (
                 <>
-                    <span className="text-gray-500 opacity-70 select-none">[{timeStr}]</span>
+                    <span className="text-gray-500 opacity-70 select-none shrink-0">[{timeStr}]</span>
                     <span className={cn("font-bold w-8 shrink-0", typeColor)}>{entry.type}</span>
                 </>
             )}
-            <span className={cn("flex-1", wordWrap ? "" : "truncate")}>{renderedContent}</span>
+            <span className={cn(
+                "flex-1 min-w-0",
+                wordWrap ? "whitespace-pre-wrap break-all leading-[18px]" : "truncate"
+            )}>{renderedContent}</span>
         </div>
     );
 });

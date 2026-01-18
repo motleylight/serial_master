@@ -50,7 +50,7 @@ def main():
     try:
         while True:
             counter += 1
-            msg = f"[TEST] Heartbeat #{counter} from Python\n"
+            msg = f"[TEST] Heartbeat #{counter} from Python. This is a very long sentence. This is a very long sentence. This is a very long sentence. This is a very long sentence. This is a very long sentence.\n"
             ser.write(msg.encode('utf-8'))
             # local echo
             # sys.stdout.write(f"\r[TX] Sent: {msg.strip()}   ")
