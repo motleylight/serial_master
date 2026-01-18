@@ -154,6 +154,7 @@ function App() {
 
       await SerialService.connect(configToUse);
       setConnected(true);
+      updateTerminalConfig({ autoScroll: true });
       addSystemLog(`Connected to ${configToUse.port_name} at ${configToUse.baud_rate}`, 'SYS');
     } catch (e: any) {
       console.error(e);
@@ -191,6 +192,12 @@ function App() {
         }
         return newLogs;
       });
+
+      // Disable autoscroll AFTER the logs have been updated and rendered
+      // Use setTimeout to ensure the scroll effect (triggered by log update) has a chance to run
+      setTimeout(() => {
+        updateTerminalConfig({ autoScroll: false });
+      }, 200);
     } catch (e: any) {
       console.error(e);
       addSystemLog(`Disconnect failed: ${e.toString()}`, 'ERR');
