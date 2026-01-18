@@ -1,34 +1,120 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
+import { useScriptRunner } from '../hooks/useScriptRunner';
+import { SerialService } from '../services/ipc';
+import { Loader2, Square, HelpCircle, X } from 'lucide-react';
 
 interface CommandEditorProps {
     content: string;
     setContent: (val: string) => void;
     onSend: (data: Uint8Array | number[]) => void;
+    onLog?: (msg: string) => void;
     connected: boolean;
     wordWrap?: 'on' | 'off';
 }
 
-export function CommandEditor({ content, setContent, onSend, connected, wordWrap = 'off' }: CommandEditorProps) {
+export function CommandEditor({ content, setContent, onSend, onLog, connected, wordWrap = 'off' }: CommandEditorProps) {
 
     const editorRef = useRef<any>(null);
     const monacoRef = useRef<any>(null);
     const decorationsCollection = useRef<any>(null);
-    const commandIndexMapRef = useRef<Record<number, string>>({});
+    const [showHelp, setShowHelp] = useState(false);
+    const [monacoInstance, setMonacoInstance] = useState<any>(null);
+
+    const { run: runScript, terminate: stopScript, feedData, status: scriptStatus } = useScriptRunner({
+        onSend: (data) => {
+            if (connected) onSend(data);
+        },
+        onLog: (msg) => {
+            onLog?.(msg);
+        },
+        onError: (err) => {
+            console.error("Script Error:", err);
+            // Optionally show toast or alert
+        }
+    });
+
+    // Listen to incoming data for 'recv'
+    useEffect(() => {
+        let unlisten: any = null;
+        const setup = async () => {
+            unlisten = await SerialService.listen((data) => {
+                feedData(data);
+            });
+        };
+        setup();
+        return () => {
+            if (unlisten) unlisten();
+        };
+    }, [feedData]);
+
 
     // --- Parsing Logic ---
     type ParseResult =
         | { type: 'noop'; data: null }
         | { type: 'error'; data: string }
         | { type: 'hex'; data: Uint8Array }
-        | { type: 'text'; data: Uint8Array };
+        | { type: 'text'; data: Uint8Array }
+        | { type: 'script'; data: string };
 
-    const parseLine = (text: string): ParseResult => {
-        const trimmed = text.trim();
+    const parseCommandAtLine = (model: any, lineNumber: number): ParseResult => {
+        const lineContent = model.getLineContent(lineNumber);
+        const trimmed = lineContent.trim();
+
         if (!trimmed || trimmed.startsWith('#')) return { type: 'noop', data: null };
 
-        if (trimmed.toLowerCase().startsWith('hex:')) {
-            const hexStr = trimmed.substring(4).trim();
+        // 1. Check if inside a code block
+        let startLine = -1;
+        let endLine = -1;
+
+        // Scan backwards for start of block
+        for (let i = lineNumber; i >= 1; i--) {
+            const txt = model.getLineContent(i).trim();
+            if (txt.startsWith('```')) {
+                if (i === lineNumber) {
+                    startLine = i;
+                } else {
+                    startLine = i;
+                }
+                break;
+            }
+        }
+
+        if (startLine !== -1) {
+            // Check if we are closed before current line
+            let closed = false;
+            for (let i = startLine + 1; i < lineNumber; i++) {
+                if (model.getLineContent(i).trim().startsWith('```')) {
+                    closed = true;
+                    break;
+                }
+            }
+
+            if (!closed) {
+                // We are inside or on start. Scan for end.
+                for (let i = Math.max(startLine + 1, lineNumber); i <= model.getLineCount(); i++) {
+                    if (model.getLineContent(i).trim().startsWith('```')) {
+                        endLine = i;
+                        break;
+                    }
+                }
+
+                if (endLine !== -1) {
+                    // Extract Script
+                    const range = model.getValueInRange({
+                        startLineNumber: startLine + 1,
+                        startColumn: 1,
+                        endLineNumber: endLine - 1,
+                        endColumn: model.getLineMaxColumn(endLine - 1)
+                    });
+                    return { type: 'script', data: range };
+                }
+            }
+        }
+
+        // 2. Hex
+        if (trimmed.startsWith('*') && trimmed.endsWith('*') && trimmed.length > 1) {
+            const hexStr = trimmed.substring(1, trimmed.length - 1).trim();
             const cleanHex = hexStr.replace(/[^0-9A-Fa-f]/g, '');
             if (cleanHex.length % 2 !== 0) return { type: 'error', data: 'Invalid Hex Length' };
 
@@ -39,27 +125,72 @@ export function CommandEditor({ content, setContent, onSend, connected, wordWrap
             return { type: 'hex', data: bytes };
         }
 
-        return { type: 'text', data: new TextEncoder().encode(text) };
+        // 3. Fallback: Text
+        if (trimmed.startsWith('```')) return { type: 'noop', data: null };
+        return { type: 'text', data: new TextEncoder().encode(trimmed) };
+    };
+
+    const getCommandsList = (fullContent: string): string[] => {
+        const lines = fullContent.split('\n');
+        const cmds: string[] = [];
+        let currentScript: string[] = [];
+        let inScriptBlock = false;
+
+        const flushScript = () => {
+            if (currentScript.length > 0) {
+                cmds.push(currentScript.join('\n'));
+                currentScript = [];
+            }
+        };
+
+        for (let line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('```')) {
+                if (inScriptBlock) {
+                    inScriptBlock = false;
+                    flushScript();
+                } else {
+                    inScriptBlock = true;
+                }
+                continue;
+            }
+
+            if (inScriptBlock) {
+                currentScript.push(line);
+                continue;
+            }
+
+            if (!trimmed || trimmed.startsWith('#')) continue;
+
+            cmds.push(trimmed);
+        }
+        return cmds;
     };
 
     // --- Execution ---
     const executeLine = useCallback((lineNumber: number) => {
+        // If script is running, maybe stop it? Or allow parallel?
+        // Let's allow clicking "Run" on another line to just run that too (queueing in worker is hard, new worker per run is safer but heavier).
+        // Our hook reuses the worker. Calling run() terminates previous.
+        // So clicking Run executes NEW code.
+
         if (!editorRef.current) return;
-        if (!connected) return;
+        // if (!connected) return; // Allow running script logic even if disconnected? send() will fail/ignore.
 
         const model = editorRef.current.getModel();
-        const lineContent = model.getLineContent(lineNumber);
-
-        const result = parseLine(lineContent);
+        const result = parseCommandAtLine(model, lineNumber);
 
         if (result.type === 'hex') {
             onSend(result.data);
         } else if (result.type === 'text') {
             onSend(result.data);
+        } else if (result.type === 'script') {
+            const cmdList = getCommandsList(model.getValue());
+            runScript(result.data, cmdList);
         } else if (result.type === 'error') {
             console.warn('Command Error:', result.data);
         }
-    }, [editorRef, connected, onSend]);
+    }, [editorRef, connected, onSend, runScript]);
 
     // --- Stale Closure Fix ---
     const executeLineRef = useRef(executeLine);
@@ -68,25 +199,45 @@ export function CommandEditor({ content, setContent, onSend, connected, wordWrap
     }, [executeLine]);
 
     // --- Command Index Calculation (Line Numbers) ---
+    const commandIndexMapRef = useRef<Record<number, string>>({});
+
     useEffect(() => {
         const lines = content.split('\n');
         const map: Record<number, string> = {};
         let cmdCounter = 0;
+        let inBlock = false;
 
-        lines.forEach((line, index) => {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
             const trimmed = line.trim();
-            // Valid command logic: Not empty, not comment
+
+            if (trimmed.startsWith('```')) {
+                if (!inBlock) {
+                    cmdCounter++;
+                    map[i + 1] = cmdCounter.toString();
+                    inBlock = true;
+                } else {
+                    map[i + 1] = '';
+                    inBlock = false;
+                }
+                continue;
+            }
+
+            if (inBlock) {
+                map[i + 1] = '';
+                continue;
+            }
+
             if (trimmed && !trimmed.startsWith('#')) {
                 cmdCounter++;
-                map[index + 1] = cmdCounter.toString();
+                map[i + 1] = cmdCounter.toString();
             } else {
-                map[index + 1] = '';
+                map[i + 1] = '';
             }
-        });
+        }
 
         commandIndexMapRef.current = map;
 
-        // Force update options to re-render line numbers
         if (editorRef.current) {
             editorRef.current.updateOptions({
                 lineNumbers: (lineNumber: number) => {
@@ -106,18 +257,52 @@ export function CommandEditor({ content, setContent, onSend, connected, wordWrap
         const lineCount = model.getLineCount();
         const newDecorations = [];
 
+        let inBlock = false;
+
         for (let i = 1; i <= lineCount; i++) {
             const content = model.getLineContent(i);
             const trimmed = content.trim();
+
+            if (trimmed.startsWith('```')) {
+                if (!inBlock) {
+                    inBlock = true;
+                    // Start of block: Run Button
+                    newDecorations.push({
+                        range: new monacoRef.current.Range(i, 1, i, 1),
+                        options: {
+                            isWholeLine: false,
+                            glyphMarginClassName: 'run-glyph-margin', // Can we make this dynamic? 'run-glyph-running'?
+                            glyphMarginHoverMessage: { value: 'Run Script' }
+                        }
+                    });
+                } else {
+                    inBlock = false;
+                }
+                continue;
+            }
+
+            if (inBlock) continue;
+
             if (trimmed && !trimmed.startsWith('#')) {
+                const isHex = trimmed.startsWith('*') && trimmed.endsWith('*') && trimmed.length > 1;
+
                 newDecorations.push({
                     range: new monacoRef.current.Range(i, 1, i, 1),
                     options: {
                         isWholeLine: false,
                         glyphMarginClassName: 'run-glyph-margin',
-                        glyphMarginHoverMessage: { value: 'Run Line' }
+                        glyphMarginHoverMessage: { value: isHex ? 'Run Hex' : 'Send Line' }
                     }
                 });
+
+                if (isHex) {
+                    newDecorations.push({
+                        range: new monacoRef.current.Range(i, 1, i, model.getLineMaxColumn(i)),
+                        options: {
+                            afterContentClassName: 'hex-badge'
+                        }
+                    });
+                }
             }
         }
 
@@ -127,38 +312,77 @@ export function CommandEditor({ content, setContent, onSend, connected, wordWrap
     const handleEditorDidMount: OnMount = (editor, monaco) => {
         editorRef.current = editor;
         monacoRef.current = monaco;
+        setMonacoInstance(monaco);
 
         decorationsCollection.current = editor.createDecorationsCollection([]);
 
-        // Click Handler
         editor.onMouseDown((e) => {
             if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
                 const lineNumber = e.target.position?.lineNumber;
                 if (lineNumber) executeLineRef.current(lineNumber);
             }
-        });
-
-        // Keybinding: Ctrl+Enter
-        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-            const position = editor.getPosition();
-            if (position) {
-                executeLineRef.current(position.lineNumber);
+            // Handle folding toggle on line numbers
+            if (e.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS) {
+                const lineNumber = e.target.position?.lineNumber;
+                if (lineNumber) {
+                    const lineContent = editor.getModel()?.getLineContent(lineNumber).trim();
+                    // Only toggle if it looks like a script start or we marked it
+                    if (lineContent?.startsWith('```') && commandIndexMapRef.current[lineNumber] === '▼') {
+                        editor.setPosition({ lineNumber, column: 1 });
+                        editor.trigger('fold', 'editor.toggleFold', {});
+                    }
+                }
             }
         });
 
         updateDecorations();
     };
 
+    // Register Folding Provider with Cleanup
+    useEffect(() => {
+        if (!monacoInstance) return;
+
+        const disposable = monacoInstance.languages.registerFoldingRangeProvider('markdown', {
+            provideFoldingRanges: (model: any, _context: any, _token: any) => {
+                const ranges = [];
+                const lineCount = model.getLineCount();
+                let start = -1;
+
+                for (let i = 1; i <= lineCount; i++) {
+                    const line = model.getLineContent(i).trim();
+                    if (line.startsWith('```')) {
+                        if (start === -1) {
+                            start = i;
+                        } else {
+                            // End of block
+                            ranges.push({
+                                start: start,
+                                end: i,
+                                kind: monacoInstance.languages.FoldingRangeKind.Region
+                            });
+                            start = -1;
+                        }
+                    }
+                }
+                return ranges;
+            }
+        });
+
+        return () => {
+            disposable.dispose();
+        };
+    }, [monacoInstance]);
+
     useEffect(() => {
         updateDecorations();
     }, [content, updateDecorations]);
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full overflow-hidden relative">
             <div className="flex-1 min-h-0 relative">
                 <Editor
                     height="100%"
-                    defaultLanguage="text"
+                    defaultLanguage="markdown"
                     value={content}
                     onChange={(val) => setContent(val || '')}
                     onMount={handleEditorDidMount}
@@ -167,7 +391,8 @@ export function CommandEditor({ content, setContent, onSend, connected, wordWrap
                         glyphMargin: true,
                         lineNumbers: (lineNumber) => commandIndexMapRef.current[lineNumber] || '',
                         lineNumbersMinChars: 2,
-                        folding: false,
+                        folding: true,
+                        showFoldingControls: 'never', // Changed from 'always' to 'never'
                         wordWrap: wordWrap,
                         scrollBeyondLastLine: false,
                         fontSize: 12,
@@ -177,10 +402,122 @@ export function CommandEditor({ content, setContent, onSend, connected, wordWrap
                         contextmenu: false,
                     }}
                 />
+
+                {/* Help Overlay */}
+                {showHelp && (
+                    <div className="absolute inset-2 bg-background/95 backdrop-blur-sm border border-border shadow-lg rounded-md z-10 overflow-y-auto p-4 flex flex-col">
+                        <div className="flex justify-between items-start mb-4 border-b pb-2">
+                            <h2 className="text-lg font-bold">Commands & Scripting Guide</h2>
+                            <button onClick={() => setShowHelp(false)} className="p-1 hover:bg-muted rounded"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="prose prose-sm dark:prose-invert max-w-none space-y-6">
+                            <div>
+                                <h3 className="text-base font-semibold">Message Format</h3>
+                                <ul className="list-disc pl-4 space-y-1">
+                                    <li><strong># Name</strong>: Command Header</li>
+                                    <li><strong>Hello</strong>: Plain Text Command</li>
+                                    <li><strong>*AA BB*</strong>: Hex Command (wrapped in asterisks)</li>
+                                </ul>
+                            </div>
+
+                            <div>
+                                <h3 className="text-base font-semibold">JavaScript API</h3>
+                                <p className="text-xs text-muted-foreground mb-2">Use <code>```js</code> blocks. No imports needed.</p>
+                                <ul className="list-disc pl-4 space-y-1">
+                                    <li><code>send(data)</code>: Send string, bytes <code>[0xAA]</code>, or Hex String <code>"*AA BB*"</code></li>
+                                    <li><code>recv(timeout)</code>: Wait for data and return <strong>String</strong> (or null)</li>
+                                    <li><code>recv_hex(timeout)</code>: Wait for data and return <strong>Uint8Array</strong> (or null)</li>
+                                    <li><code>delay(ms)</code>: Pause execution (e.g. <code>delay(1000)</code>)</li>
+                                    <li><code>log(msg)</code>: Print to system log</li>
+                                    <li><code>cmd[i]</code>: Access other commands (Array of strings)</li>
+                                </ul>
+                            </div>
+
+                            <div>
+                                <h3 className="text-base font-semibold">Script Examples</h3>
+
+                                <div className="space-y-4">
+                                    {/* Example 1 */}
+                                    <div>
+                                        <div className="font-medium text-xs mb-1">1. Loop with Delay</div>
+                                        <pre className="bg-muted p-2 rounded text-xs overflow-x-auto">
+                                            {`\`\`\`js
+log("Starting Loop...");
+for(let i = 1; i <= 5; i++) {
+    log("Count: " + i);
+    send([0xAA, i]); 
+    delay(500); // 500ms delay
+}
+\`\`\``}
+                                        </pre>
+                                    </div>
+
+                                    {/* Example 2 */}
+                                    <div>
+                                        <div className="font-medium text-xs mb-1">2. Simple Send & Receive</div>
+                                        <pre className="bg-muted p-2 rounded text-xs overflow-x-auto">
+                                            {`\`\`\`js
+log("Sending Query...");
+send("AT+VERSION\\r\\n");
+
+const resp = recv(2000); // Wait up to 2s
+if (resp) {
+    const text = new TextDecoder().decode(resp);
+    log("Reply: " + text);
+} else {
+    log("Timeout!");
+}
+\`\`\``}
+                                        </pre>
+                                    </div>
+
+                                    {/* Example 3 */}
+                                    <div>
+                                        <div className="font-medium text-xs mb-1">3. Handshake (Wait for Data then Reply)</div>
+                                        <pre className="bg-muted p-2 rounded text-xs overflow-x-auto">
+                                            {`\`\`\`js
+log("Waiting for Hex AA 55...");
+const packet = recv(5000); // Wait 5s
+
+if (packet && packet.length >= 2 && packet[0] === 0xAA && packet[1] === 0x55) {
+    log("Valid Handshake! Sending ACK.");
+    send("OK");
+} else {
+    log("Invalid or No Data");
+}
+\`\`\``}
+                                        </pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-            <div className="px-2 py-1 bg-muted/30 border-t border-border text-[10px] text-muted-foreground flex justify-between">
-                <span>Ctrl+Enter=Run &nbsp; # Comment &nbsp; HEX: AA BB</span>
+            <div className="px-2 py-1 bg-muted/30 border-t border-border text-[10px] text-muted-foreground flex justify-between items-center h-[26px]">
+                {scriptStatus === 'running' ? (
+                    <div className="flex items-center gap-2 text-primary font-medium">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Running Script...</span>
+                        <button onClick={stopScript} className="ml-2 hover:text-red-500 flex items-center gap-1">
+                            <Square className="w-3 h-3 fill-current" />
+                            Stop
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-4">
+                        <span># Header &nbsp; *Hex* &nbsp; ```js Script</span>
+                    </div>
+                )}
+                <button
+                    onClick={() => setShowHelp(!showHelp)}
+                    className={`flex items-center gap-1 hover:text-foreground ${showHelp ? 'text-primary font-medium' : ''}`}
+                    title="Toggle Help"
+                >
+                    <HelpCircle className="w-3 h-3" />
+                    <span>Help</span>
+                </button>
             </div>
-        </div>
+        </div >
     );
 }

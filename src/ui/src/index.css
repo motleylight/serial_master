@@ -63,6 +63,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -81,4 +82,26 @@
 
 .run-glyph-margin:hover {
   opacity: 1;
+}
+
+/* Hex Badge Decoration */
+.hex-badge::after {
+  content: "HEX";
+  font-size: 8px;
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 0px 3px;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.dark .hex-badge::after {
+  background-color: #1e293b;
+  color: #94a3b8;
+  border-color: #334155;
 }

@@ -1,0 +1,27 @@
+# Cmd撒旦法水电费撒旦法水电费
+asdfdsadf
+
+# Cmd
+wafeadssafdafdsafsasashasdfjksahdkjfashas
+
+# 我的家
+*08 05 04*
+
+# 代码块
+```js
+log("Script Started");
+send("Start Loop");
+for(let i=0; i<3; i++) {
+    send([0xAA, i]);
+    delay(500); 
+}
+log("Sending AT Command");
+send("AT");
+const resp = recv(1000); 
+if(resp) {
+   log("Got Reply: " + resp.length + " bytes");
+   send("Got Reply");
+} else {
+   log("Timeout waiting for reply");
+}
+```

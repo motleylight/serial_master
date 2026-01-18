@@ -17,12 +17,13 @@ interface StoredCommand {
 
 interface CommandManagerProps {
     onSend: (data: Uint8Array | number[]) => void;
+    onLog: (msg: string) => void;
     connected: boolean;
     filePath: string;
     onFilePathChange: (path: string) => void;
 }
 
-export function CommandManager({ onSend, connected, filePath, onFilePathChange }: CommandManagerProps) {
+export function CommandManager({ onSend, onLog, connected, filePath, onFilePathChange }: CommandManagerProps) {
     const [content, setContent] = useState('');
     const [loaded, setLoaded] = useState(false);
     const [viewMode, setViewMode] = useState<'editor' | 'grid'>('editor');
@@ -38,7 +39,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                 try {
                     fileContent = await readTextFile(filePath);
                 } catch (e) {
-                    if (filePath === 'commands.yaml' || filePath === 'commands.txt' || (!filePath.includes('/') && !filePath.includes('\\'))) {
+                    if (filePath === 'commands.md' || filePath === 'commands.txt' || (!filePath.includes('/') && !filePath.includes('\\'))) {
                         if (await exists(filePath, { baseDir: BaseDirectory.AppConfig })) {
                             fileContent = await readTextFile(filePath, { baseDir: BaseDirectory.AppConfig });
                         } else {
@@ -53,6 +54,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                     }
                 }
 
+                // Auto-Migrate Legacy YAML/JSON to Markdown
                 if (fileContent.trim().startsWith('-') || fileContent.trim().startsWith('[')) {
                     try {
                         const parsed = yaml.load(fileContent) as StoredCommand[];
@@ -61,7 +63,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                                 const lines = [];
                                 if (c.name && c.name !== 'Cmd') lines.push(`# ${c.name}`);
                                 if (c.isHex) {
-                                    lines.push(`HEX: ${c.command}`);
+                                    lines.push(`*${c.command}*`);
                                 } else {
                                     lines.push(c.command);
                                 }
@@ -96,7 +98,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
 
         const saveFile = async () => {
             try {
-                if (filePath === 'commands.yaml' || filePath === 'commands.txt' || (!filePath.includes('/') && !filePath.includes('\\'))) {
+                if (filePath === 'commands.md' || filePath === 'commands.txt' || (!filePath.includes('/') && !filePath.includes('\\'))) {
                     // Try to Create Dir blindly
                     try {
                         await mkdir('', { baseDir: BaseDirectory.AppConfig, recursive: true });
@@ -118,7 +120,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
     const handleAdd = () => {
         setContent(prev => {
             const prefix = prev.trim() ? '\n\n' : '';
-            return prev + prefix + '# \nType Command Here';
+            return prev + prefix + '# New Command\ncommand_here';
         });
     };
 
@@ -128,7 +130,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                 multiple: false,
                 filters: [{
                     name: 'Command Files',
-                    extensions: ['txt', 'yaml', 'yml', 'log']
+                    extensions: ['md', 'txt', 'yaml', 'yml', 'log']
                 }]
             });
             if (selected && typeof selected === 'string') {
@@ -143,10 +145,13 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
         try {
             const path = await save({
                 filters: [{
+                    name: 'Markdown File',
+                    extensions: ['md']
+                }, {
                     name: 'Text File',
                     extensions: ['txt']
                 }],
-                defaultPath: filePath.replace(/\.(yaml|yml)$/, '.txt') || 'commands.txt'
+                defaultPath: filePath.replace(/\.(yaml|yml|txt)$/, '.md') || 'commands.md'
             });
 
             if (!path) return;
@@ -171,7 +176,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                 <div className="flex gap-1 shrink-0">
                     <button
                         onClick={() => setWordWrap(w => w === 'on' ? 'off' : 'on')}
-                        className={`p-1 rounded border border-transparent ${wordWrap === 'on' ? 'bg-black/10 text-primary' : 'hover:bg-black/10'}`}
+                        className={`p-1 rounded border border-transparent ${wordWrap === 'on' ? 'bg-white shadow-sm text-primary' : 'hover:bg-black/10'}`}
                         title="Toggle Word Wrap"
                     >
                         <WrapText className="w-3.5 h-3.5" />
@@ -215,6 +220,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                         content={content}
                         setContent={setContent}
                         onSend={onSend}
+                        onLog={onLog}
                         connected={connected}
                         wordWrap={wordWrap}
                     />
@@ -223,6 +229,7 @@ export function CommandManager({ onSend, connected, filePath, onFilePathChange }
                         content={content}
                         setContent={setContent}
                         onSend={onSend}
+                        onLog={onLog}
                         connected={connected}
                         onAdd={handleAdd}
                         wordWrap={wordWrap}

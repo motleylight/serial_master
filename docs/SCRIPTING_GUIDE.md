@@ -1,306 +1,157 @@
-# 脚本功能使用指南
+# SerialMaster Command & Scripting Guide
 
-SerialMaster 提供了强大的脚本扩展能力，允许用户通过自定义脚本对串口收发数据进行处理。
+SerialMaster 提供了强大的命令管理和脚本自动化功能，支持 Markdown 格式的命令文件和 JavaScript 脚本执行。
 
-## 1. 概述
+## 1. 界面概览
 
-脚本系统支持两种执行模式和两个挂载点（Hook）：
+命令面板支持两种视图，点击标题栏右上角的切换按钮即可切换：
 
-| 挂载点 | 说明 |
-|--------|------|
-| **TX Hook** | 在数据发送到串口**之前**执行 |
-| **RX Hook** | 在从串口接收数据**之后**执行 |
+- **Grid View (网格视图)**: 卡片式布局，适合快速点击发送常用指令。
+- **Editor View (编辑器视图)**: 基于 Monaco Editor 的代码编辑环境，支持只有编辑、语法高亮和脚本编写。
 
-| 执行模式 | 执行位置 | 说明 |
-|----------|----------|------|
-| **JavaScript** | 前端 (浏览器) | 使用 `new Function()` 执行，无需任何外部依赖 |
-| **External** | 后端 (Rust) | 调用外部程序，通过 stdin/stdout 传递数据 |
+所有命令保存在 `commands.md` 文件中，方便分享和版本管理。
+
+## 2. 命令语法 (Markdown)
+
+SerialMaster 使用标准的 Markdown 格式来定义命令。
+
+### 2.1 普通文本命令
+使用 `#` 定义命令名称，下一行紧跟要发送的文本内容。
+
+```markdown
+# Hello Command
+Hello World
+```
+
+### 2.2 Hex (十六进制) 命令
+使用一对星号 `*` 包裹十六进制数据。编辑器会自动识别并以 Hex 模式发送。
+
+```markdown
+# Send Bytes
+*AA 55 01 FF*
+```
+*提示：编辑器中 Hex 命令会显示特殊的 "HEX" 标识。*
+
+## 3. 脚本系统 (JavaScript)
+
+对于复杂的自动化任务，您可以使用 JavaScript 脚本。脚本运行在独立的 Worker 线程中，不会阻塞界面。
+
+### 3.1 脚本语法
+使用 ` ```js ` 代码块包裹脚本内容。
+
+```markdown
+# My Script
+\`\`\`js
+// 脚本内容
+\`\`\`
+```
+
+### 3.2 内置 API
+脚本环境内置了以下能够直接使用的函数（无需 import）：
+
+- **`send(data)`**
+  发送数据到串口。
+  - `data`: 字符串 (String) 或 数组 (Array/Uint8Array)。
+  - 支持 `*AA BB*` 格式的十六进制字符串（会自动识别并以 Hex 发送）。
+  - 例: `send("AT\r\n")` 或 `send([0xAA, 0xBB])` 或 `send("*AA BB*")`
+
+- **`delay(ms)`**
+  延时等待。**无需使用 await**，系统自动处理。
+  - `ms`: 毫秒数。
+  - 例: `delay(1000)` (等待1秒)
+
+- **`recv(timeout)`**
+  接收串口数据。**无需使用 await**。
+  - `timeout`: 超时时间（毫秒），默认为 1000ms。
+  - 返回: `Uint8Array` (如果收到数据) 或 `null` (如果超时)。
+  - 例: `var data = recv(2000)`
+
+- **`log(msg)`**
+  打印日志到系统主界面的日志窗口（显示为紫色 SYS 消息）。
+  - `msg`: 要打印的字符串。
+  - 例: `log("Test Passed")`
+
+- **`cmd` (Array)**
+  包含当前文件所有命令的内容数组（字符串）。
+  - `cmd[0]`: 第一条命令的内容。
+  - 如果命令是 Hex (如 `*AA BB*`)，则保留星号格式，可直接传给 `send()`。
+  - 例: `send(cmd[0])` (自动发送第一条命令的内容)
 
 ---
 
-## 2. 如何使用
+## 4. 脚本示例
 
-### 2.1 打开脚本编辑器
+以下是三个典型的脚本示例：
 
-1. 在控制面板工具栏找到 **"Script"** 按钮
-2. 点击打开脚本编辑器弹窗
+### 示例 1: 循环带延时发送
+每隔 500ms 发送一次数据，循环 5 次。
 
-### 2.2 配置脚本
+```markdown
+# Loop Test
+\`\`\`js
+log("Starting Loop Test...");
 
-1. 在编辑器中选择 **TX** 或 **RX** 标签页
-2. 选择脚本类型：
-   - **JS** - JavaScript 脚本（推荐，零配置）
-   - **External** - 外部程序命令
-3. 在编辑区域输入脚本内容或命令
-4. 点击 **"Run"** 按钮启用脚本
+for(let i = 1; i <= 5; i++) {
+    log("Iteration " + i);
+    
+    // 发送带有序号的数据
+    send([0xAA, i]); 
+    
+    // 等待 500ms
+    delay(500);
+}
 
-### 2.3 脚本状态指示
-
-当脚本激活时：
-- **"Script"** 按钮变为**蓝色胶囊状态**
-- 胶囊中间显示当前运行的 Hook 类型（`TX`、`RX` 或两者都有）
-- 点击胶囊最右侧的 **"×"** 按钮可快速停止所有脚本
-
----
-
-## 3. JavaScript 脚本
-
-JavaScript 脚本直接在前端浏览器环境中执行，具有最低延迟和最简单的配置。
-
-### 3.1 上下文变量
-
-脚本可以访问一个名为 `data` 的变量：
-
-```javascript
-// data 是一个字节数组 (number[])，每个元素是 0-255 的整数
-// 例如：[72, 101, 108, 108, 111] 对应 "Hello"
+log("Loop Finished");
+\`\`\`
 ```
 
-### 3.2 脚本规则
+### 示例 2: 一发一收 (基本的 AT 指令测试)
+发送查询指令，并等待设备回复。
 
-- **直接修改 `data`**：脚本执行后，系统读取 `data` 的最终状态
-- **返回新数组**：脚本也可以返回一个新数组作为处理结果
-- **TX Hook**：修改后的 `data` 会被发送到串口
-- **RX Hook**：
-  - 修改后的 `data` 会显示在终端
-  - 返回空数组 `[]` 或 `null` 将丢弃该包（不显示）
+```markdown
+# AT Query
+\`\`\`js
+log("Sending AT Command...");
 
-### 3.3 示例代码
+// 发送查询
+send("AT+VERSION\r\n");
 
-#### TX Hook：添加校验和
+// 等待回复 (最多 2000ms)
+const resp = recv(2000);
 
-```javascript
-// 计算所有字节的和（取低8位），追加到数据末尾
-const sum = data.reduce((a, b) => a + b, 0) & 0xFF;
-data.push(sum);
+if (resp) {
+    // 收到数据，转换为字符串更容易查看 (假设是 ASCII 回复)
+    const text = new TextDecoder().decode(resp);
+    log("Received: " + text);
+} else {
+    log("Error: Timeout waiting for response");
+}
+\`\`\`
 ```
 
-#### TX Hook：添加包头包尾
+### 示例 3: 接收判断后发送 (自动应答)
+等待接收特定的握手信号 (0xAA 0x55)，如果收到则回复确认 (0xOK)，否则报错。
 
-```javascript
-// 协议：[0xAA] [0x55] [数据] [0xFF]
-const header = [0xAA, 0x55];
-const footer = [0xFF];
-return [...header, ...data, ...footer];
-```
+```markdown
+# Handshake Check
+\`\`\`js
+log("Waiting for Handshake (AA 55)...");
 
-#### TX Hook：CRC16-Modbus
+// 先确保清空之前的缓存? recv 会读取最新的流数据
+// 发送一个触发信号或者直接等待
+// 这里假设我们是被动等待设备发数据
+const packet = recv(5000); // 等待5秒
 
-```javascript
-// CRC16-Modbus 计算（低字节在前）
-let crc = 0xFFFF;
-for (let byte of data) {
-    crc ^= byte;
-    for (let i = 0; i < 8; i++) {
-        if (crc & 1) {
-            crc = (crc >> 1) ^ 0xA001;
-        } else {
-            crc >>= 1;
-        }
+if (packet) {
+    // 简单的判断：检查前两个字节
+    if (packet.length >= 2 && packet[0] === 0xAA && packet[1] === 0x55) {
+        log("Handshake Valid! Sending ACK.");
+        send("OK");
+    } else {
+        log("Invalid Handshake Data: " + packet.length + " bytes");
     }
+} else {
+    log("No Handshake Received within 5s");
 }
-data.push(crc & 0xFF);         // 低字节
-data.push((crc >> 8) & 0xFF);  // 高字节
+\`\`\`
 ```
-
-#### RX Hook：过滤非打印字符
-
-```javascript
-// 只保留可打印 ASCII 字符 (32-126) 和换行符
-const filtered = data.filter(b => 
-    (b >= 32 && b <= 126) || b === 10 || b === 13
-);
-data.length = 0;
-data.push(...filtered);
-```
-
-#### RX Hook：丢弃特定数据
-
-```javascript
-// 如果数据包含 0xFF，认为是噪声，丢弃
-if (data.includes(0xFF)) {
-    return [];  // 返回空数组表示丢弃
-}
-```
-
-#### RX Hook：十六进制转 ASCII
-
-```javascript
-// 将收到的十六进制字符串（如 "48656C6C6F"）转换为 ASCII
-const hexStr = String.fromCharCode(...data);
-const bytes = [];
-for (let i = 0; i < hexStr.length; i += 2) {
-    bytes.push(parseInt(hexStr.substr(i, 2), 16));
-}
-return bytes;
-```
-
----
-
-## 4. 外部程序脚本
-
-外部程序脚本允许调用任意可执行程序来处理数据，适合复杂的协议解析或需要使用特定语言/库的场景。
-
-### 4.1 工作原理
-
-1. 每次触发 Hook 时，后端启动指定的外部程序
-2. 原始数据以**二进制**形式写入程序的 **stdin**
-3. 程序处理后，将结果以**二进制**形式写入 **stdout**
-4. 后端读取 stdout 内容作为处理结果
-
-### 4.2 配置方法
-
-1. 在脚本编辑器中选择 **"External"** 类型
-2. 在输入框中填写完整的命令行，例如：
-
-```
-python process.py
-```
-
-```
-node handler.js
-```
-
-```
-./my_processor.exe
-```
-
-> **注意**：命令将通过系统 Shell 执行（Windows: cmd /C，Linux/macOS: sh -c）
-
-### 4.3 Python 示例
-
-创建文件 `process.py`：
-
-```python
-import sys
-
-# 从 stdin 读取二进制数据
-data = sys.stdin.buffer.read()
-
-# 处理数据：添加校验和
-checksum = sum(data) & 0xFF
-result = data + bytes([checksum])
-
-# 输出到 stdout（必须用 buffer 写入二进制）
-sys.stdout.buffer.write(result)
-```
-
-在脚本编辑器中配置命令：
-
-```
-python process.py
-```
-
-### 4.4 Python 示例：CRC16 计算
-
-```python
-import sys
-
-def crc16_modbus(data):
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0xA001
-            else:
-                crc >>= 1
-    return crc
-
-# 读取数据
-data = sys.stdin.buffer.read()
-
-# 计算 CRC
-crc = crc16_modbus(data)
-
-# 追加 CRC（低字节在前）
-result = data + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
-
-# 输出
-sys.stdout.buffer.write(result)
-```
-
-### 4.5 Node.js 示例
-
-创建文件 `handler.js`：
-
-```javascript
-const fs = require('fs');
-
-// 从 stdin 读取数据
-const data = fs.readFileSync(0);  // 0 是 stdin 的文件描述符
-
-// 处理：添加包头
-const header = Buffer.from([0xAA, 0x55]);
-const result = Buffer.concat([header, data]);
-
-// 输出到 stdout
-process.stdout.write(result);
-```
-
----
-
-## 5. 使用模板
-
-脚本编辑器提供了常用模板，点击 **"Templates"** 下拉菜单快速加载：
-
-### JavaScript 模板
-
-| 模板名称 | 用途 |
-|----------|------|
-| TX: Add Checksum | 添加校验和 |
-| TX: Add Header/Footer | 添加包头包尾 |
-| RX: Only Printable | 过滤非打印字符 |
-
-### External 模板
-
-| 模板名称 | 命令 |
-|----------|------|
-| Python Script | `python script.py` |
-| Node Script | `node script.js` |
-| Executable | `./path/to/executable.exe` |
-
----
-
-## 6. 注意事项
-
-### 性能
-
-- **JavaScript 脚本**：毫秒级延迟，适合高频数据
-- **外部程序**：每次调用需启动进程，有一定开销（~10-50ms）
-
-### 错误处理
-
-- **JavaScript 语法错误**：脚本不会执行，控制台显示错误
-- **外部程序错误**：
-  - 程序不存在：显示 "Failed to spawn process" 错误
-  - 程序返回非零退出码：操作中断，显示 stderr 内容
-
-### 安全性
-
-- JavaScript 脚本在浏览器沙箱中执行，权限受限
-- 外部程序以当前用户权限执行，请确保脚本来源可信
-
----
-
-## 7. 常见问题
-
-**Q: 脚本配置会保存吗？**
-
-A: 是的。脚本配置保存在 `config.yaml` 中，应用重启后自动恢复。
-
-**Q: 可以同时运行 TX 和 RX 脚本吗？**
-
-A: 可以。TX 和 RX 是独立的，可以分别配置并同时运行。
-
-**Q: JS 和 External 可以混用吗？**
-
-A: 可以。例如 TX 使用 JavaScript，RX 使用外部 Python 程序。
-
-**Q: 外部程序的工作目录是什么？**
-
-A: 工作目录是 SerialMaster 可执行文件所在的目录。
-
-**Q: 为什么 Python 脚本的输出是乱码？**
-
-A: 请确保使用 `sys.stdout.buffer.write()` 输出二进制数据，而不是 `print()`。

@@ -347,6 +347,7 @@ function App() {
 
                 <CommandManager
                   onSend={handleSend}
+                  onLog={(msg) => addSystemLog(msg, 'SYS')}
                   connected={connected}
                   filePath={config.files.commands}
                   onFilePathChange={(path) => updateFilesConfig({ commands: path })}
