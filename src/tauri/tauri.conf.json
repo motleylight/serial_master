@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "SerialUtil",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "identifier": "com.serialutil.app",
   "build": {
     "frontendDist": "../ui/dist",
