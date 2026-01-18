@@ -80,9 +80,26 @@
   transition: opacity 0.2s;
 }
 
+
 .run-glyph-margin:hover {
   opacity: 1;
 }
+
+/* Unsupported Script Glyph */
+.unsupported-glyph-margin {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23eab308" stroke="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9a1 1 0 0 1 1 1v4a1 1 0 0 1-2 0v-4a1 1 0 0 1 1-1zm0 8a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 14px;
+  cursor: help;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.unsupported-glyph-margin:hover {
+  opacity: 1;
+}
+
 
 /* Hex Badge Decoration */
 .hex-badge::after {

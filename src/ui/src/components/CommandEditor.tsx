@@ -109,6 +109,16 @@ export function CommandEditor({ content, setContent, onSend, onLog, connected, w
                         endLineNumber: endLine - 1,
                         endColumn: model.getLineMaxColumn(endLine - 1)
                     });
+
+                    // Check Language
+                    const startLineContent = model.getLineContent(startLine).trim();
+                    const lang = startLineContent.substring(3).trim().toLowerCase();
+                    const isSupported = lang === '' || lang === 'js' || lang === 'javascript';
+
+                    if (!isSupported) {
+                        return { type: 'error', data: `Unsupported language: ${lang}. Please use 'js' or leave empty.` };
+                    }
+
                     return { type: 'script', data: range };
                 }
             }
@@ -268,15 +278,30 @@ export function CommandEditor({ content, setContent, onSend, onLog, connected, w
             if (trimmed.startsWith('```')) {
                 if (!inBlock) {
                     inBlock = true;
-                    // Start of block: Run Button
-                    newDecorations.push({
-                        range: new monacoRef.current.Range(i, 1, i, 1),
-                        options: {
-                            isWholeLine: false,
-                            glyphMarginClassName: 'run-glyph-margin', // Can we make this dynamic? 'run-glyph-running'?
-                            glyphMarginHoverMessage: { value: 'Run Script' }
-                        }
-                    });
+
+                    // Validate Language
+                    const lang = trimmed.substring(3).trim().toLowerCase();
+                    const isSupported = lang === '' || lang === 'js' || lang === 'javascript';
+
+                    if (isSupported) {
+                        newDecorations.push({
+                            range: new monacoRef.current.Range(i, 1, i, 1),
+                            options: {
+                                isWholeLine: false,
+                                glyphMarginClassName: 'run-glyph-margin',
+                                glyphMarginHoverMessage: { value: 'Run Script' }
+                            }
+                        });
+                    } else {
+                        newDecorations.push({
+                            range: new monacoRef.current.Range(i, 1, i, 1),
+                            options: {
+                                isWholeLine: false,
+                                glyphMarginClassName: 'unsupported-glyph-margin',
+                                glyphMarginHoverMessage: { value: `Unsupported language: ${lang || '?'}. Only JS is supported.` }
+                            }
+                        });
+                    }
                 } else {
                     inBlock = false;
                 }
@@ -329,7 +354,8 @@ export function CommandEditor({ content, setContent, onSend, onLog, connected, w
 
         for (let i = 1; i <= lineCount; i++) {
             const lineContent = model.getLineContent(i).trim();
-            if (lineContent.startsWith('```js') || lineContent.startsWith('```javascript')) {
+            // Allow folding for ANY code block, regardless of language
+            if (lineContent.startsWith('```')) {
                 // Determine if folded
                 // We need to check if the folding region starting at this line is collapsed.
                 // Monaco doesn't expose a simple "isLineFolded(line)" directly for the start line of a region easily without accessing internal view state or iterating folding regions.
