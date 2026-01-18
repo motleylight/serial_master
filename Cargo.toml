@@ -20,6 +20,7 @@ which = "4.0"
 serde_json = "1.0.149"
 chrono = "0.4.43"
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading"] }
+uuid = { version = "1.0", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

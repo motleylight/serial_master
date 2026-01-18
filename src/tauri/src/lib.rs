@@ -39,8 +39,15 @@ pub fn run() {
             }
         }
 
+        let mut auth_token = String::new();
+        if let Some(idx) = args.iter().position(|r| r == "--token") {
+            if let Some(token) = args.get(idx + 1) {
+                auth_token = token.clone();
+            }
+        }
+
         log::info!("Starting SerialMaster Admin Service... Parent PID: {:?}", parent_pid);
-        match serial_master::core::admin_service::AdminService::run(parent_pid) {
+        match serial_master::core::admin_service::AdminService::run(parent_pid, auth_token) {
             Ok(_) => log::info!("Admin Service exited cleanly."),
             Err(e) => log::error!("Admin Service error: {}", e),
         }

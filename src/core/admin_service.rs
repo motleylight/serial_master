@@ -11,7 +11,7 @@ pub struct AdminService;
 
 impl AdminService {
     /// 运行 Admin Service (阻塞运行)
-    pub fn run(parent_pid: Option<u32>) -> Result<()> {
+    pub fn run(parent_pid: Option<u32>, auth_token: String) -> Result<()> {
         let addr = format!("127.0.0.1:{}", ADMIN_PORT);
         let listener = TcpListener::bind(&addr)
             .map_err(|e| anyhow!("Failed to bind TCP listener on {}: {}", addr, e))?;
@@ -20,6 +20,7 @@ impl AdminService {
         listener.set_nonblocking(true)?;
 
         log::info!("Admin Service started on TCP {}", addr);
+        log::info!("Auth token configured (len: {})", auth_token.len());
 
         loop {
             // 1. Check Parent PID
@@ -42,18 +43,30 @@ impl AdminService {
                     // Note: TcpStream implements Read/Write, compatible with serde_json
                     // We use Deserializer directly to avoid buffering issues if any?
                     // from_reader is usually fine.
-                    let request_res: serde_json::Result<AdminRequest> = serde_json::from_reader(&mut stream);
+                    let request_res: serde_json::Result<super::ipc::AdminRequestEnvelope> = serde_json::from_reader(&mut stream);
                     
                     match request_res {
-                        Ok(req) => {
-                            let response = Self::handle_request(req);
-                            if let Err(e) = serde_json::to_writer(&mut stream, &response) {
-                                log::error!("Failed to write response: {}", e);
+                        Ok(envelope) => {
+                            if envelope.token == auth_token {
+                                let response = Self::handle_request(envelope.payload);
+                                if let Err(e) = serde_json::to_writer(&mut stream, &response) {
+                                    log::error!("Failed to write response: {}", e);
+                                }
+                            } else {
+                                log::warn!("Invalid auth token received. Closing connection.");
+                                // Optionally send an error response or just close
+                                let err_resp = AdminResponse {
+                                    success: false,
+                                    stdout: "".into(),
+                                    stderr: "".into(),
+                                    error: Some("Authentication failed".into()),
+                                };
+                                let _ = serde_json::to_writer(&mut stream, &err_resp);
                             }
                             let _ = stream.flush();
                         }
                         Err(e) => {
-                            log::error!("Failed to parse request: {}", e);
+                            log::error!("Failed to parse request or missing envelope: {}", e);
                         }
                     }
                 },

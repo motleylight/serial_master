@@ -25,6 +25,8 @@ pub struct PortPair {
 pub struct Com0comManager {
     /// setupc.exe 路径
     setupc_path: PathBuf,
+    /// 认证 Token (UUID)
+    admin_token: String,
 }
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -33,7 +35,8 @@ impl Com0comManager {
     /// 创建管理器实例，自动检测 com0com 安装路径
     pub fn new() -> Result<Self> {
         let setupc_path = Self::find_setupc_path()?;
-        Ok(Self { setupc_path })
+        let admin_token = uuid::Uuid::new_v4().to_string();
+        Ok(Self { setupc_path, admin_token })
     }
 
     /// 检测 com0com 是否已安装
@@ -217,14 +220,19 @@ impl Com0comManager {
             }
         };
 
-        // 2. 发送请求
+        // 2. 发送请求 Envelope
         log::info!("Sending AdminRequest: ExecuteSetupc {:?}", args);
-        let req = AdminRequest::ExecuteSetupc {
+        let payload = AdminRequest::ExecuteSetupc {
             args: args.iter().map(|s| s.to_string()).collect(),
             cwd: working_dir.to_string_lossy().to_string(),
         };
 
-        serde_json::to_writer(&mut stream, &req).context("Failed to send request to Admin Service")?;
+        let envelope = super::ipc::AdminRequestEnvelope {
+            token: self.admin_token.clone(),
+            payload,
+        };
+
+        serde_json::to_writer(&mut stream, &envelope).context("Failed to send request to Admin Service")?;
         stream.flush()?; 
         stream.shutdown(std::net::Shutdown::Write).context("Failed to shutdown write stream")?;
 
@@ -261,10 +269,10 @@ impl Com0comManager {
         let pid = std::process::id();
         
         // 使用 PowerShell Start-Process -Verb RunAs 
-        // Start-Process "path" -ArgumentList "--admin-service", "--parent-pid", "123" -Verb RunAs -WindowStyle Hidden
+        // Start-Process "path" -ArgumentList "--admin-service", "--parent-pid", "123", "--token", "uuid" -Verb RunAs -WindowStyle Hidden
         let ps_script = format!(
-            "Start-Process -FilePath '{}' -ArgumentList '--admin-service', '--parent-pid', '{}' -Verb RunAs -WindowStyle Hidden",
-            exe_path.replace("'", "''"), pid
+            "Start-Process -FilePath '{}' -ArgumentList '--admin-service', '--parent-pid', '{}', '--token', '{}' -Verb RunAs -WindowStyle Hidden",
+            exe_path.replace("'", "''"), pid, self.admin_token
         );
 
         let status = Command::new("powershell")

@@ -243,15 +243,21 @@ pub async fn check_com0com_installed() -> bool {
 
 /// 获取虚拟端口对列表
 #[tauri::command]
-pub async fn get_virtual_pairs() -> Result<Vec<serial_master::core::com0com_manager::PortPair>, String> {
-    let manager = Com0comManager::new().map_err(to_string_err)?;
-    manager.list_pairs().map_err(to_string_err)
+pub async fn get_virtual_pairs(state: State<'_, Mutex<PortSharingManager>>) -> Result<Vec<serial_master::core::com0com_manager::PortPair>, String> {
+    let manager = state.lock().await;
+    let com0com = manager.com0com().ok_or("com0com not installed")?;
+    com0com.list_pairs().map_err(to_string_err)
 }
 
 /// 创建虚拟端口对
 #[tauri::command]
-pub async fn create_virtual_pair(mut name_a: String, name_b: String) -> Result<serial_master::core::com0com_manager::PortPair, String> {
-    let manager = Com0comManager::new().map_err(to_string_err)?;
+pub async fn create_virtual_pair(
+    state: State<'_, Mutex<PortSharingManager>>,
+    mut name_a: String, 
+    name_b: String
+) -> Result<serial_master::core::com0com_manager::PortPair, String> {
+    let manager = state.lock().await; 
+    let com0com = manager.com0com().ok_or("com0com not installed")?; 
     
     // Auto-name if requested
     if name_a == "-" {
@@ -260,21 +266,28 @@ pub async fn create_virtual_pair(mut name_a: String, name_b: String) -> Result<s
         name_a = "COM#".to_string();
     }
 
-    manager.create_pair(&name_a, &name_b).map_err(to_string_err)
+    com0com.create_pair(&name_a, &name_b).map_err(to_string_err)
 }
 
 /// 移除虚拟端口对
 #[tauri::command]
-pub async fn remove_virtual_pair(pair_id: u32) -> Result<(), String> {
-    let manager = Com0comManager::new().map_err(to_string_err)?;
-    manager.remove_pair(pair_id).map_err(to_string_err)
+pub async fn remove_virtual_pair(state: State<'_, Mutex<PortSharingManager>>, pair_id: u32) -> Result<(), String> {
+    let manager = state.lock().await;
+    let com0com = manager.com0com().ok_or("com0com not installed")?;
+    com0com.remove_pair(pair_id).map_err(to_string_err)
 }
 
 /// 重命名虚拟端口对
 #[tauri::command]
-pub async fn rename_virtual_pair(pair_id: u32, name_a: String, name_b: String) -> Result<(), String> {
-    let manager = Com0comManager::new().map_err(to_string_err)?;
-    manager.rename_pair(pair_id, &name_a, &name_b).map_err(to_string_err)
+pub async fn rename_virtual_pair(
+    state: State<'_, Mutex<PortSharingManager>>,
+    pair_id: u32, 
+    name_a: String, 
+    name_b: String
+) -> Result<(), String> {
+    let manager = state.lock().await;
+    let com0com = manager.com0com().ok_or("com0com not installed")?;
+    com0com.rename_pair(pair_id, &name_a, &name_b).map_err(to_string_err)
 }
 
 /// 获取端口共享状态
