@@ -2,7 +2,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { useScriptRunner } from '../hooks/useScriptRunner';
 import { SerialService } from '../services/ipc';
-import { Loader2, Square, HelpCircle, X } from 'lucide-react';
+import { Loader2, Square, HelpCircle, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { createRoot } from 'react-dom/client';
 
 interface CommandEditorProps {
     content: string;
@@ -20,6 +21,7 @@ export function CommandEditor({ content, setContent, onSend, onLog, connected, w
     const decorationsCollection = useRef<any>(null);
     const [showHelp, setShowHelp] = useState(false);
     const [monacoInstance, setMonacoInstance] = useState<any>(null);
+    const foldWidgetsRef = useRef<any[]>([]); // Store { widget, root }
 
     const { run: runScript, terminate: stopScript, feedData, status: scriptStatus } = useScriptRunner({
         onSend: (data) => {
@@ -309,6 +311,115 @@ export function CommandEditor({ content, setContent, onSend, onLog, connected, w
         decorationsCollection.current?.set(newDecorations);
     }, []);
 
+    const updateFoldWidgets = useCallback(() => {
+        if (!editorRef.current || !monacoInstance) return;
+
+        // Cleanup existing widgets
+        foldWidgetsRef.current.forEach(({ widget, root }) => {
+            editorRef.current.removeContentWidget(widget);
+            setTimeout(() => root.unmount(), 0); // Unmount after removal to avoid React warnings
+        });
+        foldWidgetsRef.current = [];
+
+        const model = editorRef.current.getModel();
+        if (!model) return;
+
+        const lineCount = model.getLineCount();
+        const newWidgets: any[] = [];
+
+        for (let i = 1; i <= lineCount; i++) {
+            const lineContent = model.getLineContent(i).trim();
+            if (lineContent.startsWith('```js') || lineContent.startsWith('```javascript')) {
+                // Determine if folded
+                // We need to check if the folding region starting at this line is collapsed.
+                // Monaco doesn't expose a simple "isLineFolded(line)" directly for the start line of a region easily without accessing internal view state or iterating folding regions.
+                // However, we can check if the *next* line is hidden? No, if folded, the next line is hidden.
+                // Actually, checking if the line *after* the start line is hidden is a good proxy.
+                // But better: use `editor.getTopForLineNumber(i+1) === editor.getTopForLineNumber(i)`?
+                // If i+1 is hidden, it has the same top as i? No.
+                // Let's use a simpler heuristic: we toggle fold on click, so we can track it? No, external folds happen.
+
+                // Hacky but effective way to check if folded:
+                // `editor.getOption(monaco.editor.EditorOption.folding)` is global.
+                // We can't easily detect fold state of a specific region efficiently without `getFoldingController`.
+                // BUT, we can just rely on the click to toggle.
+                // Visual state: maybe we always show a "Fold/Unfold" toggle and let the user click it.
+                // To show the correct icon (Down vs Right), we ideally need the state.
+
+                // Let's try to check visibility of line i+1.
+                // If i < lineCount, check if line i+1 is considered hidden.
+                // A line is hidden if `editor.getViewModel().getCoordinatesConverter().convertModelPositionToViewPosition({lineNumber: i+1, column: 1})`... confusing.
+
+                // Let's simpler: Just use a generic "Fold" icon (maybe ChevronDown), and if clicked, we toggle. 
+                // Monaco's native folding regions update automatically.
+                // If we want the icon to rotate, we need to know the state.
+                // Let's defer exact state sync for now or try:
+                // `const isFolded = editorRef.current.getTopForLineNumber(i + 1) === editorRef.current.getTopForLineNumber(i) + editorRef.current.getOption(monacoInstance.editor.EditorOption.lineHeight);`
+                // Wait, if not folded, top(i+1) > top(i). If folded, line i+1 is not rendered?
+
+                // Actually, let's just create the widget. State sync can be improved if needed.
+                // For now, assume Not Folded (ChevronDown) by default. 
+                // If we find a reliable way to check, we update.
+                // We can use `onDidChangeCursorPosition` or similar to re-render? No, too partial.
+                // Let's just render the widget and on click toggle.
+
+                const widgetNode = document.createElement('div');
+                widgetNode.className = 'command-fold-widget';
+                const root = createRoot(widgetNode);
+
+                // For initial render, we might guess 'expanded'
+                // We'll update the icon on click.
+
+                // Check basic fold state using line rendering (rough heuristic)
+                // If line i+1 is not visible in the view model...
+                // Only works if line i+1 exists.
+                // If folded, the folding region is hidden.
+                // In Monaco, `isModelLineHidden(lineNumber)` exists on the VIEW model (not exposed directly easily in public API v0.x without hacks).
+
+                const FoldWidget = () => {
+                    const [collapsed, setCollapsed] = useState(false);
+
+                    const handleClick = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        // Toggle local state
+                        setCollapsed(prev => !prev);
+
+                        // Trigger Monaco fold
+                        editorRef.current.setPosition({ lineNumber: i, column: 1 });
+                        editorRef.current.trigger('fold', 'editor.toggleFold', {});
+                    };
+
+                    return (
+                        <div onClick={handleClick} title={collapsed ? "Unfold" : "Fold"} className="flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors">
+                            {collapsed ? (
+                                <ChevronRight className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                            ) : (
+                                <ChevronDown className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                            )}
+                        </div>
+                    );
+                };
+
+                root.render(<FoldWidget />);
+
+                const widget = {
+                    getId: () => 'fold.widget.' + i,
+                    getDomNode: () => widgetNode,
+                    getPosition: () => ({
+                        position: { lineNumber: i, column: model.getLineMaxColumn(i) + 1 },
+                        preference: [monacoInstance.editor.ContentWidgetPositionPreference.EXACT]
+                    })
+                };
+
+                editorRef.current.addContentWidget(widget);
+                newWidgets.push({ widget, root });
+            }
+        }
+        foldWidgetsRef.current = newWidgets;
+    }, [monacoInstance, editorRef]);
+
+
+
     const handleEditorDidMount: OnMount = (editor, monaco) => {
         editorRef.current = editor;
         monacoRef.current = monaco;
@@ -375,7 +486,8 @@ export function CommandEditor({ content, setContent, onSend, onLog, connected, w
 
     useEffect(() => {
         updateDecorations();
-    }, [content, updateDecorations]);
+        updateFoldWidgets();
+    }, [content, updateDecorations, updateFoldWidgets]);
 
     return (
         <div className="flex flex-col h-full overflow-hidden relative">

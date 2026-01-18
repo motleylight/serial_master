@@ -105,3 +105,20 @@
   color: #94a3b8;
   border-color: #334155;
 }
+
+/* Command Fold Widget */
+.command-fold-widget {
+  cursor: pointer;
+  transition: color 0.2s;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  /* Shift right to avoid overlapping with '...' when folded */
+  margin-left: 24px;
+  width: 16px;
+  height: 16px;
+}
+
+.command-fold-widget:hover {
+  color: hsl(var(--primary));
+}
