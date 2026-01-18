@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { readTextFile, writeTextFile, exists } from '@tauri-apps/plugin-fs';
+import { writeTextFile, exists } from '@tauri-apps/plugin-fs';
+import { readTextFileWithEncoding } from '../utils/fileUtils';
 import { BaseDirectory } from '@tauri-apps/api/path';
 import yaml from 'js-yaml';
 import { useDebounce } from './useDebounce';
@@ -86,7 +87,7 @@ const DEFAULT_CONFIG: AppConfig = {
         inputHistory: []
     },
     files: {
-        commands: 'commands.yaml' // Default relative path
+        commands: 'commands.md' // Default relative path
     },
     scripts: {
         tx: { type: null, js: '', external: '' },
@@ -109,7 +110,7 @@ export function useAppConfig() {
                 }
 
                 if (await exists(CONFIG_FILE, { baseDir: BaseDirectory.Resource })) {
-                    const content = await readTextFile(CONFIG_FILE, { baseDir: BaseDirectory.Resource });
+                    const content = await readTextFileWithEncoding(CONFIG_FILE, { baseDir: BaseDirectory.Resource });
                     const parsed = yaml.load(content) as any; // Use any to safely merge
 
                     if (parsed) {

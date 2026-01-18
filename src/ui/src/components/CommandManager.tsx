@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Save, FolderOpen, LayoutGrid, FileText, WrapText } from 'lucide-react';
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { writeTextFile, readTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { readTextFileWithEncoding } from '../utils/fileUtils';
 import { BaseDirectory } from '@tauri-apps/api/path';
 import yaml from 'js-yaml';
 import { useDebounce } from '../hooks/useDebounce';
@@ -26,7 +27,7 @@ interface CommandManagerProps {
 export function CommandManager({ onSend, onLog, connected, filePath, onFilePathChange }: CommandManagerProps) {
     const [content, setContent] = useState('');
     const [loaded, setLoaded] = useState(false);
-    const [viewMode, setViewMode] = useState<'editor' | 'grid'>('editor');
+    const [viewMode, setViewMode] = useState<'editor' | 'grid'>('grid');
     const [wordWrap, setWordWrap] = useState<'on' | 'off'>('off');
 
     // --- File Loading & Migration ---
@@ -37,11 +38,11 @@ export function CommandManager({ onSend, onLog, connected, filePath, onFilePathC
             try {
                 let fileContent = '';
                 try {
-                    fileContent = await readTextFile(filePath);
+                    fileContent = await readTextFileWithEncoding(filePath);
                 } catch (e) {
                     if (filePath === 'commands.md' || filePath === 'commands.txt' || (!filePath.includes('/') && !filePath.includes('\\'))) {
                         if (await exists(filePath, { baseDir: BaseDirectory.AppConfig })) {
-                            fileContent = await readTextFile(filePath, { baseDir: BaseDirectory.AppConfig });
+                            fileContent = await readTextFileWithEncoding(filePath, { baseDir: BaseDirectory.AppConfig });
                         } else {
                             setContent('');
                             setLoaded(true);
@@ -187,18 +188,18 @@ export function CommandManager({ onSend, onLog, connected, filePath, onFilePathC
                     {/* View Switcher */}
                     <div className="flex bg-muted rounded p-0.5 mr-2">
                         <button
-                            onClick={() => setViewMode('editor')}
-                            className={`p-1 rounded text-[10px] flex items-center gap-1 ${viewMode === 'editor' ? 'bg-white shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                            title="Editor View"
-                        >
-                            <FileText className="w-3.5 h-3.5" />
-                        </button>
-                        <button
                             onClick={() => setViewMode('grid')}
                             className={`p-1 rounded text-[10px] flex items-center gap-1 ${viewMode === 'grid' ? 'bg-white shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                             title="Grid View"
                         >
                             <LayoutGrid className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('editor')}
+                            className={`p-1 rounded text-[10px] flex items-center gap-1 ${viewMode === 'editor' ? 'bg-white shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                            title="Editor View"
+                        >
+                            <FileText className="w-3.5 h-3.5" />
                         </button>
                     </div>
 
