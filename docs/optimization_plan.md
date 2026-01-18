@@ -1,7 +1,7 @@
 # Binary Size Analysis & Optimization Plan
 
 ## Current Status
-- **Current Size**: ~25.4 MB (`serial_master_tauri.exe`)
+- **Current Size**: ~25.4 MB (`serial_util_tauri.exe`)
 - **Frontend Assets**: < 1 MB (Estimated from source types)
 - **Backend (Rust)**: ~24+ MB
 
@@ -35,7 +35,7 @@ strip = true           # Strip symbols from binary
 2.  **RustPython**: Check compile-time features. Explicitly disable unused standard library modules if `default-features = false`.
 
 ### Step 3: Compression (Optional)
-- **UPX**: Use `upx --best serial_master_tauri.exe`. This can compress the 24MB EXE to ~8MB executable. However, it may trigger antivirus false positives.
+- **UPX**: Use `upx --best serial_util_tauri.exe`. This can compress the 24MB EXE to ~8MB executable. However, it may trigger antivirus false positives.
 
 ## 4. Final Results (2026-01-13)
 

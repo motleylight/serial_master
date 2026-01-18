@@ -1,8 +1,8 @@
-#[cfg(test)]
+﻿#[cfg(test)]
 mod tests {
     use std::path::PathBuf;
     use std::process::Command;
-    use serial_master::core::com0com_manager::Com0comManager;
+    use serial_util::core::com0com_manager::Com0comManager;
 
     #[test]
     fn diagnose_com0com_environment() {

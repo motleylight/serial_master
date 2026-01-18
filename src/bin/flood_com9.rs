@@ -1,4 +1,4 @@
-use std::time::Duration;
+﻿use std::time::Duration;
 use std::thread;
 use std::io::Write;
 use serialport;

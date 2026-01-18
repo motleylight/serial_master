@@ -1,6 +1,6 @@
-use serial_master::core::serial_manager::SerialManager;
-use serial_master::core::port_sharing_manager::{PortSharingManager, SharingStatus};
-use serial_master::core::com0com_manager::Com0comManager;
+use serial_util::core::serial_manager::SerialManager;
+use serial_util::core::port_sharing_manager::{PortSharingManager, SharingStatus};
+use serial_util::core::com0com_manager::Com0comManager;
 use tauri::State;
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
@@ -243,7 +243,7 @@ pub async fn check_com0com_installed() -> bool {
 
 /// 获取虚拟端口对列表
 #[tauri::command]
-pub async fn get_virtual_pairs(state: State<'_, Mutex<PortSharingManager>>) -> Result<Vec<serial_master::core::com0com_manager::PortPair>, String> {
+pub async fn get_virtual_pairs(state: State<'_, Mutex<PortSharingManager>>) -> Result<Vec<serial_util::core::com0com_manager::PortPair>, String> {
     let manager = state.lock().await;
     let com0com = manager.com0com().ok_or("com0com not installed")?;
     com0com.list_pairs().map_err(to_string_err)
@@ -255,7 +255,7 @@ pub async fn create_virtual_pair(
     state: State<'_, Mutex<PortSharingManager>>,
     mut name_a: String, 
     name_b: String
-) -> Result<serial_master::core::com0com_manager::PortPair, String> {
+) -> Result<serial_util::core::com0com_manager::PortPair, String> {
     let manager = state.lock().await; 
     let com0com = manager.com0com().ok_or("com0com not installed")?; 
     

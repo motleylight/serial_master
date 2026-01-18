@@ -1,8 +1,8 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "serial-master",
+  "productName": "SerialUtil",
   "version": "0.1.0",
-  "identifier": "com.serialmaster.app",
+  "identifier": "com.serialutil.app",
   "build": {
     "frontendDist": "../ui/dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SerialMaster",
+        "title": "SerialUtil",
         "width": 1100,
         "height": 768,
         "resizable": true,

@@ -264,7 +264,7 @@ impl Com0comManager {
         // Rust std Command 不能直接用 verb "runas"，需要用 Powershell 或者是其它 crate (如 shellapi binding)
         // 这里复用之前的 PowerShell 技巧，但是这次是启动我们自己
         
-        // 构造启动命令: serial_master.exe --admin-service --parent-pid <PID>
+        // 构造启动命令: serial_util.exe --admin-service --parent-pid <PID>
         let exe_path = current_exe.to_string_lossy();
         let pid = std::process::id();
         

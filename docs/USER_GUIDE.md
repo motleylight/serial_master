@@ -1,6 +1,6 @@
-# SerialMaster 用户指南
+# SerialUtil 用户指南
 
-SerialMaster 是一款现代化的串口调试工具，基于 Rust 后端 + React 前端构建，提供高性能的串口通信、数据分析和端口共享功能。
+SerialUtil 是一款现代化的串口调试工具，基于 Rust 后端 + React 前端构建，提供高性能的串口通信、数据分析和端口共享功能。
 
 ---
 
@@ -161,8 +161,8 @@ SerialMaster 是一款现代化的串口调试工具，基于 Rust 后端 + Reac
 1. 点击工具栏的 **"Script"** 按钮
 2. 选择 **TX**（发送前）或 **RX**（接收后）标签
 3. 选择脚本类型：
-   - **JS**：JavaScript 脚本，无需配置直接运行
-   - **External**：调用外部程序（如 Python）
+- **JS**：JavaScript 脚本，无需配置直接运行
+- **External**：调用外部程序（如 Python）
 4. 编写脚本内容
 5. 点击 **"Run"** 启用
 
@@ -213,10 +213,10 @@ sys.stdout.buffer.write(data + bytes([checksum]))
 ### 7.3 工作原理
 
 ```
-物理设备 ↔ SerialMaster (占用 COM3 + CNCB0) ↔ com0com ↔ 第三方软件 (占用 COM10)
+物理设备 ↔ SerialUtil (占用 COM3 + CNCB0) ↔ com0com ↔ 第三方软件 (占用 COM10)
 ```
 
-- SerialMaster 同时连接物理端口和虚拟端口 B
+- SerialUtil 同时连接物理端口和虚拟端口 B
 - com0com 驱动自动将虚拟端口 A ↔ B 的数据互通
 - 第三方软件连接虚拟端口 A，像连接真实串口一样操作
 
@@ -302,7 +302,7 @@ cargo build --release
 ### Q: 端口共享提示 "com0com 未安装"
 
 - 下载并安装 com0com 驱动
-- 安装后重启 SerialMaster
+- 安装后重启 SerialUtil
 
 ### Q: 外部脚本执行失败
 

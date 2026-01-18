@@ -1,8 +1,8 @@
-# SerialMaster Architecture Design
+# SerialUtil Architecture Design
 
 ## 1. System Overview
 
-SerialMaster is a desktop application built with **Tauri** (Rust) for the backend and **React** (TypeScript/Vite) for the frontend.
+SerialUtil is a desktop application built with **Tauri** (Rust) for the backend and **React** (TypeScript/Vite) for the frontend.
 
 ### Core Technologies
 - **Backend**: Rust, Tauri Core, `serialport` crate.

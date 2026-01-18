@@ -1,8 +1,8 @@
 mod commands;
 pub mod scripting;
 
-use serial_master::core::serial_manager::SerialManager;
-use serial_master::core::port_sharing_manager::PortSharingManager;
+use serial_util::core::serial_manager::SerialManager;
+use serial_util::core::port_sharing_manager::PortSharingManager;
 use scripting::ScriptManager;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
@@ -46,8 +46,8 @@ pub fn run() {
             }
         }
 
-        log::info!("Starting SerialMaster Admin Service... Parent PID: {:?}", parent_pid);
-        match serial_master::core::admin_service::AdminService::run(parent_pid, auth_token) {
+        log::info!("Starting SerialUtil Admin Service... Parent PID: {:?}", parent_pid);
+        match serial_util::core::admin_service::AdminService::run(parent_pid, auth_token) {
             Ok(_) => log::info!("Admin Service exited cleanly."),
             Err(e) => log::error!("Admin Service error: {}", e),
         }
@@ -128,7 +128,7 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 // Explicitly shutdown Admin Service on exit
                 let _ = std::thread::spawn(|| {
-                     use serial_master::core::ipc::{AdminRequest, AdminResponse};
+                     use serial_util::core::ipc::{AdminRequest, AdminResponse};
                      use std::net::TcpStream;
                      if let Ok(mut stream) = TcpStream::connect("127.0.0.1:56789") {
                          let req = AdminRequest::Shutdown;

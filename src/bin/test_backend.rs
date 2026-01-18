@@ -1,8 +1,8 @@
-use serial_master::core::serial_manager::SerialManager;
+﻿use serial_util::core::serial_manager::SerialManager;
 
 #[tokio::main]
 async fn main() {
-    println!("Testing SerialMaster backend...");
+    println!("Testing SerialUtil backend...");
 
     // Try to list available ports
     match serialport::available_ports() {

@@ -1,4 +1,4 @@
-# SerialMaster 软件架构文档
+# SerialUtil 软件架构文档
 
 > **文档版本**: 1.0  
 > **更新日期**: 2026-01-17  
@@ -20,7 +20,7 @@
 
 ## 1. 项目概述
 
-SerialMaster 是一款基于 Tauri 构建的现代串口调试工具，采用 Rust 后端 + React 前端的混合架构。主要功能：
+SerialUtil 是一款基于 Tauri 构建的现代串口调试工具，采用 Rust 后端 + React 前端的混合架构。主要功能：
 
 - **串口通信**: 连接、读写串口数据
 - **端口共享**: 基于 com0com 虚拟串口驱动，允许多应用共享同一物理串口
@@ -154,7 +154,7 @@ struct PortInfo {
 ```rust
 struct PortPair {
     pair_id: u32,     // 端口对 ID
-    port_a: String,   // A 端口名 (内部端口，SerialMaster 使用)
+    port_a: String,   // A 端口名 (内部端口，SerialUtil 使用)
     port_b: String,   // B 端口名 (外部端口，第三方应用使用)
 }
 ```
@@ -385,7 +385,7 @@ sys.stdout.buffer.write(result)
            ▼                                                    ▼
 ┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
 │                     │     │      com0com        │     │                     │
-│    SerialMaster     │◀───▶│   (虚拟串口驱动)     │◀───▶│   Virtual Port A    │
+│    SerialUtil       │◀───▶│   (虚拟串口驱动)     │◀───▶│   Virtual Port A    │
 │                     │     │                     │     │      (COM10)        │
 └─────────────────────┘     └─────────────────────┘     └─────────────────────┘
            │                          │                          │
@@ -394,15 +394,16 @@ sys.stdout.buffer.write(result)
 ┌─────────────────────┐     ┌─────────────────────┐              │
 │   Physical Port     │     │   Virtual Port B    │◀─────────────┘
 │      (COM3)         │     │     (CNCB0)         │
+│                     │     │                     │
 └─────────────────────┘     └─────────────────────┘
 ```
 
 **数据流说明:**
 
-- **SerialMaster** 同时打开物理端口 (COM3) 和虚拟端口 B (CNCB0)
+- **SerialUtil** 同时打开物理端口 (COM3) 和虚拟端口 B (CNCB0)
 - **com0com 驱动** 自动将 Virtual Port A ↔ Virtual Port B 的数据互通
 - **第三方应用** 连接 Virtual Port A (COM10)，像连接真实串口一样操作
-- **双向透传**: 物理设备 ↔ SerialMaster ↔ 虚拟端口B ↔ 虚拟端口A ↔ 第三方App
+- **双向透传**: 物理设备 ↔ SerialUtil ↔ 虚拟端口B ↔ 虚拟端口A ↔ 第三方App
 
 **从后端获取的数据:**
 
@@ -459,7 +460,7 @@ sys.stdout.buffer.write(result)
 
 ```
                     ┌─────────────────────────────────┐
-                    │           SerialMaster           │
+                    │           SerialUtil             │
                     │                                  │
 ┌─────────────┐     │  ┌─────────────┐  ┌──────────┐  │     ┌─────────────┐
 │  物理串口    │◀───▶│  │ SerialManager │◀▶│ 虚拟端口 │  │◀───▶│  第三方应用   │
@@ -477,7 +478,7 @@ sys.stdout.buffer.write(result)
 **特点:**
 
 - 双向透明桥接：物理端口 ↔ 虚拟端口
-- SerialMaster 自身可同时收发数据（Spy 模式）
+- SerialUtil 自身可同时收发数据（Spy 模式）
 - 第三方应用无需修改即可使用虚拟端口
 
 ---
@@ -580,7 +581,7 @@ src/
     │   ├── CommandManager.tsx  # 命令管理器
     │   ├── ScriptEditor.tsx    # 脚本编辑器
     │   └── PortSharingDialog.tsx # 端口共享
-    ├── services/               # 服务层
+    │   └── services/               # 服务层
     │   ├── ipc.ts              # Tauri IPC 封装
     │   └── ScriptService.ts    # 脚本服务
     └── hooks/                  # React Hooks

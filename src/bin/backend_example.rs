@@ -1,9 +1,9 @@
-use serial_master::core::serial_manager::SerialManager;
+﻿use serial_util::core::serial_manager::SerialManager;
 use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("SerialMaster Backend Example");
+    println!("SerialUtil Backend Example");
     println!("=============================");
 
     // List available ports
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("3. Sending test data...");
-    let test_data = b"Hello from SerialMaster backend!";
+    let test_data = b"Hello from SerialUtil backend!";
 
     match manager.write(test_data).await {
         Ok(_) => println!("   Successfully sent {} bytes", test_data.len()),

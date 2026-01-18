@@ -329,11 +329,11 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
         return (
             <div className="w-full h-full p-8 overflow-auto flex items-center justify-center bg-muted/5">
                 <div className="flex items-start justify-center gap-0 min-w-[800px]">
-                    {/* LEFT: SerialMaster Container (Horizontal Layout) */}
+                    {/* LEFT: SerialUtil Container (Horizontal Layout) */}
                     <div className={cn(containerClass, "flex-row items-center gap-0 pr-0 min-w-0")}>
                         <div className="absolute -top-3 left-4 bg-background px-2 text-xs font-bold text-muted-foreground flex items-center gap-1 border border-border rounded-full shadow-sm z-30">
                             <Zap className="w-3 h-3 fill-current" />
-                            SerialMaster
+                            SerialUtil
                         </div>
 
                         {/* 1. Physical Port (Left) */}
@@ -417,7 +417,7 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
                         {activePairs.map((pair) => (
                             <div key={pair.pair_id} className="h-24 relative flex items-center justify-center">
                                 {/* Cable Line - positioned to bridge left gap */}
-                                {/* left-[-24px] bridges the gap into SerialMaster (p-4 = 16px + buffer) */}
+                                {/* left-[-24px] bridges the gap into SerialUtil (p-4 = 16px + buffer) */}
                                 <div className={cn("absolute h-[2px] top-1/2 -translate-y-1/2",
                                     isSharing ? "bg-purple-500/50" : "bg-border",
                                     "-left-6 w-[calc(100%+24px)]"
@@ -610,7 +610,7 @@ export const PortSharingDialog: React.FC<PortSharingDialogProps> = ({
                                     How it works
                                 </h4>
                                 <ul className="list-disc pl-4 space-y-1 text-xs">
-                                    <li>SerialMaster maintains the exclusive connection to the physical port.</li>
+                                    <li>SerialUtil maintains the exclusive connection to the physical port.</li>
                                     <li>Data received from the physical port is bridged to all active virtual clone ports.</li>
                                     <li>Any data sent to a clone port by other applications is forwarded to the physical port.</li>
                                     <li>You can connect up to 3rd party software (e.g. Serial Plotter, Terminal) to the clone ports simultaneously.</li>

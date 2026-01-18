@@ -2,7 +2,7 @@
 
 ## 1. 模块功能 (Module Features)
 
-串口分享模块的核心功能是解决 Windows 系统下串口独占访问的限制，允许用户在 SerialMaster 占用物理串口的同时，将其“分享”给其他第三方软件使用。
+串口分享模块的核心功能是解决 Windows 系统下串口独占访问的限制，允许用户在 SerialUtil 占用物理串口的同时，将其“分享”给其他第三方软件使用。
 
 ### 核心能力
 1.  **虚拟串口管理**：
@@ -10,7 +10,7 @@
     *   自动识别系统中已存在的虚拟串口对。
 2.  **透明数据透传 (Transparent Bridging)**：
     *   实现物理串口与虚拟串口之间的双向数据转发。
-    *   **RX 路径**：物理串口接收的数据 -> 同时发送给 SerialMaster UI 显示 -> 转发给虚拟串口 B。
+    *   **RX 路径**：物理串口接收的数据 -> 同时发送给 SerialUtil UI 显示 -> 转发给虚拟串口 B。
     *   **TX 路径**：从虚拟串口 B 接收的数据 (来自第三方软件) -> 转发给物理串口发送。
 3.  **非侵入式接入**：
     *   第三方软件连接虚拟串口 A (External Port)，操作体验与连接真实物理串口完全一致。
@@ -21,7 +21,7 @@
 ## 2. 设计目的 (Design Philosophy)
 
 *   **解决独占痛点**：通常调试串口时，打开监视器就无法使用业务软件，反之亦然。本模块旨在打破这一限制。
-*   **调试与业务并行**：用户可以使用 SerialMaster 强大的分析功能（波形、日志、脚本）监控通信，同时保持原有的业务软件正常运行。
+*   **调试与业务并行**：用户可以使用 SerialUtil 强大的分析功能（波形、日志、脚本）监控通信，同时保持原有的业务软件正常运行。
 *   **用户体验优先**：
     *   自动化繁琐的驱动配置过程 (封装 `setupc.exe`)。
     *   提供直观的拓扑视图，让用户理解数据流向。
@@ -57,7 +57,7 @@
 
 ### 3.3 权限提升机制 (Privilege Elevation Mechanism)
 
-由于 `com0com` 的配置工具 `setupc.exe` 需要管理员权限才能对虚拟串口进行创建、修改、删除等操作，而 SerialMaster 默认以普通用户权限运行（避免安全风险和拖拽文件失效），因此引入了 **Admin Service** 机制：
+由于 `com0com` 的配置工具 `setupc.exe` 需要管理员权限才能对虚拟串口进行创建、修改、删除等操作，而 SerialUtil 默认以普通用户权限运行（避免安全风险和拖拽文件失效），因此引入了 **Admin Service** 机制：
 
 1.  **架构设计**：
     *   **Main Process**: 普通权限运行，包含 GUI。
@@ -76,12 +76,12 @@
 
 ## 4. 拓扑设计与数据流 (Topology & Data Flow)
 
-设计采用了 **"Internal Bridging" (内部桥接)** 模式，利用 SerialMaster 自身作为中继站。
+设计采用了 **"Internal Bridging" (内部桥接)** 模式，利用 SerialUtil 自身作为中继站。
 
 ### 4.1 端口角色定义
 为了清晰描述数据流，我们将虚拟串口对中的两个端口定义如下：
 *   **Internal Port (亦称 Port B)**:
-    *   **用途**: 供 SerialMaster 内部连接。
+    *   **用途**: 供 SerialUtil 内部连接。
     *   **方向**: 桥接物理串口数据。
     *   **示例**: `COM11` (CNCB0)
 *   **External Port (亦称 Port A)**:
@@ -94,7 +94,7 @@
 graph LR
     ExternalDevice[外部物理设备] <===> PhysicalPort[物理串口 (e.g. COM3)]
     
-    subgraph SerialMaster [SerialMaster 内部处理]
+    subgraph SerialUtil [SerialUtil 内部处理]
         PhysicalPort <==> SerialManager
         SerialManager ==> UI_Display[UI 终端显示]
         SerialManager <==> BridgeLogic[内部桥接逻辑]

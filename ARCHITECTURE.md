@@ -1,46 +1,71 @@
-# SerialMaster Architecture Overview
+# SerialUtil Architecture Design
 
-**Project:** SerialMaster
-**Type:** Native Cross-Platform Serial Debugger & Automation Tool
-**Tech Stack:** Rust + Tauri v2 + React (Shadcn UI) + Tokio
+## 1. System Overview
 
-## 1. 核心设计原则 (Design Principles)
-* **Zero-Runtime Dependency:** 编译为单一二进制文件，无外部 Python/Node 环境依赖。
-* **Reactive UI:** 采用 Virtual Scrolling 处理高频串口日志，保证 UI 零卡顿。
-* **Separation of Concerns:** * **Core (Rust):** 负责所有 I/O、配置读写、脚本执行。
-    * **View (React):** 仅负责渲染状态和捕获用户输入，不处理业务逻辑。
-* **Test-Driven (Phase 0):** 基于虚拟串口对 (COM8/COM9) 构建全自动化集成测试。
+SerialUtil is a desktop application built with **Tauri** (Rust) for the backend and **React** (TypeScript/Vite) for the frontend.
 
-## 2. 模块分层 (Layering)
+### Core Technologies
+- **Backend**: Rust, Tauri Core, `serialport-rs` crate.
+- **Frontend**: React 18, TypeScript, Tailwind CSS, Lucide Icons.
+- **Communication**: Tauri IPC (Inter-Process Communication).
 
-### Layer 1: Interface
-* **GUI:** Tauri WebView (Windows WebView2).
-* **CLI (Phase 3):** `clap` based headless runner.
+## 2. IPC Interface (Frontend <-> Backend)
 
-### Layer 2: Core Logic (Rust `lib`)
-* **Session Manager:** 管理 `serialport` 实例，维护连接状态。
-* **Data Pipeline:** * Raw Bytes -> Pre-Send Hook -> Serial Port
-    * Serial Port -> Raw Bytes -> Rx Hook -> Buffer -> IPC Event -> UI
-* **Profile Manager:** JSON 序列化/反序列化，处理指令集 CRUD。
+The communication between the UI and the Serial Engine is handled via Tauri's IPC mechanism.
 
-### Layer 3: Runtime
-* **Async Runtime:** `tokio` (处理并发 I/O)。
-* **Script Engine (Phase 2):** `RustPython` (嵌入式 VM)。
+### Commands (Frontend -> Backend)
 
-## 3. 数据协议 (Data Schema)
+| Command | Arguments | Return Type | Description |
+|---------|-----------|-------------|-------------|
+| `get_ports` | None | `Vec<String>` | Returns a list of available serial ports (e.g., `["COM1", "COM8"]`). |
+| `connect` | `port_name: String`, `baud_rate: u32` | `Result<(), String>` | Opens the specified serial port. Starts a background thread for reading. |
+| `disconnect` | None | `Result<(), String>` | Closes the currently open serial port and stops the reading thread. |
+| `send` | `content: String` | `Result<usize, String>` | Sends data to the serial port. Currently supports UTF-8 string data. |
 
-**Profile Configuration (`profile.json`)**
-用户交换的核心资产，严格剥离环境配置。
-```json
-{
-  "meta": { "name": "Device_Protocol_V1", "version": "1.0.0" },
-  "commands": [
-    {
-      "id": "uuid-v4",
-      "name": "Handshake",
-      "payload": "AA 55 00 01",
-      "is_hex": true,
-      "description": "System init command"
-    }
-  ]
-}
+### Events (Backend -> Frontend)
+
+| Event Name | Payload | Frontend Handling |
+|------------|---------|-------------------|
+| `serial-data` | `Vec<u8>` | **Crucial:** Received as `number[]` by Tauri/Serde. The frontend **MUST** convert this to `Uint8Array` before usage to ensure proper byte manipulation. |
+
+### Data Handling Detail
+Tauri's serialization layer passes Rust's `Vec<u8>` as a standard JSON array of numbers to the WebView.
+- **Problem**: Passing `number[]` directly to `TextDecoder` or hex formatters can be inefficient or incorrect if types are mismatched.
+- **Solution**: The `SerialService.listen` wrapper in `src/ui/src/services/ipc.ts` explicitly casts the payload:
+  ```typescript
+  callback(new Uint8Array(event.payload));
+  ```
+
+## 3. Frontend Architecture
+
+### Component Structure
+- **`App.tsx`**: The main controller.
+  - Manages global state: `ports`, `connected` status, `logs` buffer.
+  - Handles IPC connection lifecycles (`useEffect`).
+  - Implements the log buffer limit (circular buffer strategy, max 10k items).
+- **`TerminalContainer.tsx`**:
+  - Responsible for rendering the log list.
+  - **Rendering Strategy**: Currently uses a native `div` with `overflow-y-auto` and `.map()` for robustness. (virtualization libraries were removed to resolve environment-specific rendering issues).
+  - Features: Auto-scroll, Clear, View Modes (ASCII/HEX).
+- **`LogEntry.tsx`**:
+  - Pure component for rendering a single log line.
+  - Supports HEX view (formatted hex strings) and ASCII view.
+
+### Services
+- **`ipc.ts` (`SerialService`)**:
+  - Static class encapsulating all Tauri `invoke` and `listen` calls.
+  - Provides strict typing for the application layer.
+
+## 4. Backend Design (Rust)
+
+Located in `src-tauri/src/lib.rs`.
+
+- **`SerialAppState`**: Wraps a `Mutex<Option<Box<dyn SerialPort>>>` to manage the singleton serial port instance.
+- **Threading**:
+  - Upon connection, a new thread (`std::thread::spawn`) is created to loop on `port.read()`.
+  - Data read is emitted immediately to the frontend via `app_handle.emit("serial-data", buffer)`.
+  - Thread termination is handled by checking a shared flag or channel (implementation detail managed by `SerialManager`).
+
+## 5. Future Considerations
+- **Virtualization**: If log performance drops with >10k items, re-evaluate `react-window` or `tanstack-virtual` with proper Vite configuration.
+- **Binary Sending**: The current `send` command accepts strings. Future updates should support `Vec<u8>` or Hex input for binary transmission.

@@ -1,5 +1,5 @@
-use anyhow::{Result, Context};
-use serial_master::core::serial_manager::SerialManager;
+﻿use anyhow::{Result, Context};
+use serial_util::core::serial_manager::SerialManager;
 use std::time::Duration;
 use tokio::time::sleep;
 use serialport;
@@ -49,7 +49,7 @@ async fn test_loopback_integrity() -> Result<()> {
     ).context("Failed to open writer port via Manager")?;
 
     // 3. Test Data
-    let test_payload = b"Hello SerialMaster Phase0";
+    let test_payload = b"Hello SerialUtil Phase0";
     
     // 4. Send Data
     manager.write(test_payload).await.context("Failed to write data")?;

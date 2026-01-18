@@ -1,5 +1,5 @@
-use serial_master::core::com0com_manager::Com0comManager;
-use serial_master::core::hub4com_manager::Hub4comManager;
+use serial_util::core::com0com_manager::Com0comManager;
+use serial_util::core::hub4com_manager::Hub4comManager;
 
 // 注意：这些测试需要管理员权限才能完全通过
 // 运行测试时会触发 UAC 弹窗

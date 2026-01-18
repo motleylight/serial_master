@@ -1,6 +1,6 @@
-# SerialMaster Command & Scripting Guide
+# SerialUtil Command & Scripting Guide
 
-SerialMaster 提供了强大的命令管理和脚本自动化功能，支持 Markdown 格式的命令文件和 JavaScript 脚本执行。
+SerialUtil 提供了强大的命令管理和脚本自动化功能，支持 Markdown 格式的命令文件和 JavaScript 脚本执行。
 
 ## 1. 界面概览
 
@@ -13,7 +13,7 @@ SerialMaster 提供了强大的命令管理和脚本自动化功能，支持 Mar
 
 ## 2. 命令语法 (Markdown)
 
-SerialMaster 使用标准的 Markdown 格式来定义命令。
+SerialUtil 使用标准的 Markdown 格式来定义命令。
 
 ### 2.1 普通文本命令
 使用 `#` 定义命令名称，下一行紧跟要发送的文本内容。
