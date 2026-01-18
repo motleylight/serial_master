@@ -98,8 +98,8 @@ export function ControlPanel({
         return () => ScriptService.removeEventListener('change', handler);
     }, []);
 
-    const hasTxScript = scriptState.tx.type !== null && !!scriptState.tx.content;
-    const hasRxScript = scriptState.rx.type !== null && !!scriptState.rx.content;
+    const hasTxScript = scriptState.tx.type !== null && (scriptState.tx.type === 'js' ? !!scriptState.tx.js : !!scriptState.tx.external);
+    const hasRxScript = scriptState.rx.type !== null && (scriptState.rx.type === 'js' ? !!scriptState.rx.js : !!scriptState.rx.external);
     const isScriptActive = hasTxScript || hasRxScript;
 
     useEffect(() => {
@@ -447,7 +447,7 @@ export function ControlPanel({
 
                                 {/* Stop Button */}
                                 <button
-                                    onClick={() => ScriptService.clearAll()}
+                                    onClick={() => ScriptService.stopAll()}
                                     className="h-full px-1.5 hover:bg-red-100 text-blue-400 hover:text-red-500 transition-colors flex items-center justify-center"
                                     title="Stop All Scripts"
                                 >
@@ -525,6 +525,6 @@ export function ControlPanel({
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

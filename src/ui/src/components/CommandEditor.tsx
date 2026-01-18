@@ -352,24 +352,7 @@ export function CommandEditor({ content, setContent, onSend, onLog, connected, w
         const lineCount = model.getLineCount();
         const newWidgets: any[] = [];
 
-        for (let i = 1; i <= lineCount; i++) {
-            const lineContent = model.getLineContent(i).trim();
-            // Allow folding for ANY code block, regardless of language
-            // But checking for '```' matches both start and end!
-            // We need to differentiate.
-            // A simple heuristic: if it has chars after ```, it's a start.
-            // If it's JUST ```, it could be start (plain) or end.
-            // To be precise, we need to track toggle state like we do in decorations or parsing.
 
-            // Re-using the logic from parse/decorations is best.
-            // But here we can do a simple state machine:
-
-            // Let's assume we are in block if we saw a start.
-            // This loop needs to track `inBlock`.
-
-            // Actually, we can reuse the parsing logic concept correctly.
-
-        }
         let inBlock = false;
 
         for (let i = 1; i <= lineCount; i++) {

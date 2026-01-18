@@ -1,16 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 
-type ScriptType = 'js' | 'external' | null;
+export type ScriptType = 'js' | 'external' | null;
 
-interface ScriptState {
+export interface ScriptState {
     type: ScriptType;
-    content: string;
+    js: string;
+    external: string;
 }
 
 class ScriptServiceClass extends EventTarget {
     // State
-    private _tx: ScriptState = { type: null, content: '' };
-    private _rx: ScriptState = { type: null, content: '' };
+    private _tx: ScriptState = { type: null, js: '', external: '' };
+    private _rx: ScriptState = { type: null, js: '', external: '' };
 
     constructor() {
         super();
@@ -18,27 +19,27 @@ class ScriptServiceClass extends EventTarget {
     }
 
     private load() {
-        // Initial load now relies on config sync, but we can't assume config is ready yet.
-        // We initialize with empty.
-        // Migration legacy: clean up old keys if present?
-        // Let's leave them for now in case of rollback.
+        // Initial load relies on config sync
     }
 
     // New Sync Method called by App.tsx when Config changes
-    // But we need to be careful not to create a loop if we are the ones who triggered it.
-    // However, App.tsx will only update config if we told it to.
-    // When config loads from disk, it calls this.
     async syncState(scripts: { tx: ScriptState; rx: ScriptState }) {
         let changed = false;
 
         // Compare and update TX
-        if (scripts.tx.type !== this._tx.type || scripts.tx.content !== this._tx.content) {
+        const txDifferent =
+            scripts.tx.type !== this._tx.type ||
+            scripts.tx.js !== this._tx.js ||
+            scripts.tx.external !== this._tx.external;
+
+        if (txDifferent) {
             this._tx = { ...scripts.tx };
             // Apply to backend
             const type = this._tx.type;
-            const content = this._tx.content;
+            // For backend, we only care about 'external' type content for pre_send
+            // JS execution happens in frontend runTxHook
             if (type === 'external') {
-                await invoke('set_script', { scriptType: 'pre_send', content });
+                await invoke('set_script', { scriptType: 'pre_send', content: this._tx.external });
             } else {
                 await invoke('set_script', { scriptType: 'pre_send', content: '' });
             }
@@ -46,13 +47,17 @@ class ScriptServiceClass extends EventTarget {
         }
 
         // Compare and update RX
-        if (scripts.rx.type !== this._rx.type || scripts.rx.content !== this._rx.content) {
+        const rxDifferent =
+            scripts.rx.type !== this._rx.type ||
+            scripts.rx.js !== this._rx.js ||
+            scripts.rx.external !== this._rx.external;
+
+        if (rxDifferent) {
             this._rx = { ...scripts.rx };
             // Apply to backend
             const type = this._rx.type;
-            const content = this._rx.content;
             if (type === 'external') {
-                await invoke('set_script', { scriptType: 'rx', content });
+                await invoke('set_script', { scriptType: 'rx', content: this._rx.external });
             } else {
                 await invoke('set_script', { scriptType: 'rx', content: '' });
             }
@@ -70,50 +75,76 @@ class ScriptServiceClass extends EventTarget {
 
     // --- Actions ---
 
-    async setTxScript(type: ScriptType, content: string) {
-        if (!content) type = null;
-        this._tx = { type, content };
+    async updateTx(updates: Partial<ScriptState>) {
+        const newState = { ...this._tx, ...updates };
+        this._tx = newState; // Optimistic update
 
-        if (type === 'external') {
-            await invoke('set_script', { scriptType: 'pre_send', content });
+        // Notify backend if necessary
+        if (newState.type === 'external') {
+            await invoke('set_script', { scriptType: 'pre_send', content: newState.external });
         } else {
+            // If we switched away from external, or if we are in JS mode, clear backend
+            // BUT: if we are just updating 'js' content while type is 'external', we shouldn't change backend?
+            // Actually, if type is external, backend needs 'external' content.
+            // If type is NOT external, backend needs empty.
             await invoke('set_script', { scriptType: 'pre_send', content: '' });
         }
+
         this.dispatchEvent(new Event('change'));
     }
 
-    async setRxScript(type: ScriptType, content: string) {
-        if (!content) type = null;
-        this._rx = { type, content };
+    async updateRx(updates: Partial<ScriptState>) {
+        const newState = { ...this._rx, ...updates };
+        this._rx = newState;
 
-        if (type === 'external') {
-            await invoke('set_script', { scriptType: 'rx', content });
+        if (newState.type === 'external') {
+            await invoke('set_script', { scriptType: 'rx', content: newState.external });
         } else {
             await invoke('set_script', { scriptType: 'rx', content: '' });
         }
+
         this.dispatchEvent(new Event('change'));
     }
 
-    async clearAll() {
-        this._tx = { type: null, content: '' };
-        this._rx = { type: null, content: '' };
+    // Legacy/Helper wrappers if needed, but we'll try to use updateTx/Rx from UI
+    // Replacing setTxScript with logic that intelligently updates the right field
+    async setTxScript(type: ScriptType, content: string) {
+        // This method assumes "Active Script" update.
+        // So we update the 'type', AND the specific content field corresponding to that type.
+        const updates: Partial<ScriptState> = { type };
+        if (type === 'js') updates.js = content;
+        if (type === 'external') updates.external = content;
 
-        await invoke('set_script', { scriptType: 'pre_send', content: '' });
-        await invoke('set_script', { scriptType: 'rx', content: '' });
+        // Ensure null content doesn't break things (though UI sends empty string)
+        await this.updateTx(updates);
+    }
 
-        this.dispatchEvent(new Event('change'));
+    async setRxScript(type: ScriptType, content: string) {
+        const updates: Partial<ScriptState> = { type };
+        if (type === 'js') updates.js = content;
+        if (type === 'external') updates.external = content;
+        await this.updateRx(updates);
+    }
+
+    async stopAll() {
+        // Only reset type to null, preserve content
+        await this.updateTx({ type: null });
+        await this.updateRx({ type: null });
+
+        // Backend update is handled by updateTx/updateRx calling invoke('set_script', ...)
+        // Since type is null, updateTx/Rx will send empty string to backend.
     }
 
     // --- Execution Hooks (Frontend JS) ---
 
     runTxHook(data: Uint8Array | number[]): Uint8Array {
-        if (this._tx.type !== 'js' || !this._tx.content.trim()) {
+        if (this._tx.type !== 'js' || !this._tx.js.trim()) {
             return data instanceof Uint8Array ? data : new Uint8Array(data);
         }
 
         try {
             const dataArr = Array.from(data);
-            const f = new Function('data', this._tx.content);
+            const f = new Function('data', this._tx.js);
             const ret = f(dataArr);
             const result = Array.isArray(ret) ? ret : dataArr;
             return new Uint8Array(result);
@@ -124,13 +155,13 @@ class ScriptServiceClass extends EventTarget {
     }
 
     runRxHook(data: Uint8Array): Uint8Array {
-        if (this._rx.type !== 'js' || !this._rx.content.trim()) {
+        if (this._rx.type !== 'js' || !this._rx.js.trim()) {
             return data;
         }
 
         try {
             const dataArr = Array.from(data);
-            const f = new Function('data', this._rx.content);
+            const f = new Function('data', this._rx.js);
             const ret = f(dataArr);
 
             if (ret === null || (Array.isArray(ret) && ret.length === 0)) {

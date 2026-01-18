@@ -8,7 +8,8 @@ const CONFIG_FILE = 'config.yaml';
 
 export interface ScriptStateConfig {
     type: 'js' | 'external' | null;
-    content: string;
+    js: string;
+    external: string;
 }
 
 export interface ScriptConfig {
@@ -88,8 +89,8 @@ const DEFAULT_CONFIG: AppConfig = {
         commands: 'commands.yaml' // Default relative path
     },
     scripts: {
-        tx: { type: null, content: '' },
-        rx: { type: null, content: '' }
+        tx: { type: null, js: '', external: '' },
+        rx: { type: null, js: '', external: '' }
     }
 };
 

@@ -86,53 +86,24 @@ export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
     const [extPre, setExtPre] = useState('');
     const [extRx, setExtRx] = useState('');
 
-    // Draft Persistence
-    useEffect(() => {
-        const drafts = {
-            js: { pre: jsPre, rx: jsRx },
-            ext: { pre: extPre, rx: extRx }
-        };
-        localStorage.setItem('script_drafts', JSON.stringify(drafts));
-    }, [jsPre, jsRx, extPre, extRx]);
-
     // Initial Load Logic
     useEffect(() => {
         if (isOpen) {
             const tx = ScriptService.txState;
             const rx = ScriptService.rxState;
 
-            // 1. Try to load ACTIVE scripts first
-            // Mode inference: If any script is active, switch to that mode
+            // 1. Load DRAFTS from Service (Config)
+            setJsPre(tx.js || '');
+            setJsRx(rx.js || '');
+            setExtPre(tx.external || '');
+            setExtRx(rx.external || '');
+
+            // 2. Set Mode based on ACTIVE type
             if (tx.type === 'js' || rx.type === 'js') {
                 setMode('js');
-                if (tx.type === 'js') setJsPre(tx.content);
-                if (rx.type === 'js') setJsRx(rx.content);
             } else if (tx.type === 'external' || rx.type === 'external') {
                 setMode('external');
-                if (tx.type === 'external') setExtPre(tx.content);
-                if (rx.type === 'external') setExtRx(rx.content);
             }
-
-            // 2. Load DRAFTS for non-active parts (or everything if nothing active)
-            try {
-                const saved = localStorage.getItem('script_drafts');
-                if (saved) {
-                    const drafts = JSON.parse(saved);
-                    // Only overwrite if NOT active (to avoid overwriting running code with old drafts, 
-                    // though usually running code IS the draft. Use caution.)
-                    // Actually, if active, we already set it above.
-                    // We just need to fill in the blanks.
-
-                    if (drafts.js) {
-                        if (tx.type !== 'js') setJsPre(drafts.js.pre || '');
-                        if (rx.type !== 'js') setJsRx(drafts.js.rx || '');
-                    }
-                    if (drafts.ext) {
-                        if (tx.type !== 'external') setExtPre(drafts.ext.pre || '');
-                        if (rx.type !== 'external') setExtRx(drafts.ext.rx || '');
-                    }
-                }
-            } catch (e) { console.error(e); }
         }
     }, [isOpen]);
 
@@ -199,18 +170,21 @@ export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
             if (selected && typeof selected === 'string') {
                 const content = await readTextFile(selected);
                 if (mode === 'js') {
-                    if (activeTab === 'pre_send') setJsPre(content);
-                    else setJsRx(content);
+                    if (activeTab === 'pre_send') {
+                        setJsPre(content);
+                        ScriptService.updateTx({ js: content });
+                    } else {
+                        setJsRx(content);
+                        ScriptService.updateRx({ js: content });
+                    }
                 } else {
-                    // Start thinking: External mode "Open File" might mean "Pick Executable Path"?
-                    // Or "Load command from file"?
-                    // Assuming picking executable path to put in command box.
-                    // Actually readTextFile implies loading CONTENT of file.
-                    // If mode is external, maybe we shouldn't "Open File" content, but "Pick Path".
-                    // But if user wants to load a saved "command string", they can use text file.
-                    // Let's assume loading text content for now.
-                    if (activeTab === 'pre_send') setExtPre(content);
-                    else setExtRx(content);
+                    if (activeTab === 'pre_send') {
+                        setExtPre(content);
+                        ScriptService.updateTx({ external: content });
+                    } else {
+                        setExtRx(content);
+                        ScriptService.updateRx({ external: content });
+                    }
                 }
             }
         } catch (err) {
@@ -239,11 +213,21 @@ export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
 
     const applyTemplate = (code: string) => {
         if (mode === 'js') {
-            if (activeTab === 'pre_send') setJsPre(code);
-            else setJsRx(code);
+            if (activeTab === 'pre_send') {
+                setJsPre(code);
+                ScriptService.updateTx({ js: code });
+            } else {
+                setJsRx(code);
+                ScriptService.updateRx({ js: code });
+            }
         } else {
-            if (activeTab === 'pre_send') setExtPre(code);
-            else setExtRx(code);
+            if (activeTab === 'pre_send') {
+                setExtPre(code);
+                ScriptService.updateTx({ external: code });
+            } else {
+                setExtRx(code);
+                ScriptService.updateRx({ external: code });
+            }
         }
     };
 
@@ -253,11 +237,21 @@ export function ScriptEditor({ isOpen, onClose }: ScriptEditorProps) {
 
     const updateCode = (val: string) => {
         if (mode === 'js') {
-            if (activeTab === 'pre_send') setJsPre(val);
-            else setJsRx(val);
+            if (activeTab === 'pre_send') {
+                setJsPre(val);
+                ScriptService.updateTx({ js: val });
+            } else {
+                setJsRx(val);
+                ScriptService.updateRx({ js: val });
+            }
         } else {
-            if (activeTab === 'pre_send') setExtPre(val);
-            else setExtRx(val);
+            if (activeTab === 'pre_send') {
+                setExtPre(val);
+                ScriptService.updateTx({ external: val });
+            } else {
+                setExtRx(val);
+                ScriptService.updateRx({ external: val });
+            }
         }
     }
 
